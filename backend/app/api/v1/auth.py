@@ -16,6 +16,10 @@ async def register(
 ):
     """Register a new user"""
     # Check if user already exists
+    
+    raw = user_data.password
+    print("PW bytes:", len(raw.encode("utf-8")))
+
     existing_user = db.query(User).filter(
         (User.email == user_data.email) | (User.username == user_data.username)
     ).first()
