@@ -3,6 +3,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
 
+from ..models import user, study_group, study_group_membership, study_group_message
+
 # Database URL
 DATABASE_URL = os.getenv(
     "DATABASE_URL", 
@@ -30,7 +32,6 @@ def get_db():
 def create_tables():
     """Create database tables"""
     try:
-        from ..models import user  # Import all models
         Base.metadata.create_all(bind=engine)
         print("Database tables created successfully")
     except Exception as e:
