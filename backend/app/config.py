@@ -34,6 +34,8 @@ class Settings(BaseSettings):
         description="SQLAlchemy-compatible database URL",
     )
 
+    RESET_DB_ON_STARTUP: bool = Field(default=False, description="DEV ONLY: drop and recreate tables on startup")
+
     # -------------------------
     # Redis / Caching
     # -------------------------
@@ -119,6 +121,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        extra = "ignore"
 
 
 # Singleton settings instance

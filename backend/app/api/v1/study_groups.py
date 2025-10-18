@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
+
+from ...models.study_group_membership import MemberRole
 from ...core.database import get_db
 from ...core.security import get_current_user
 from ...models.user import User
@@ -24,6 +26,7 @@ async def create_study_group(
     group = StudyGroupService.create_group(db, group_data, current_user.id)
     response = StudyGroupResponse(**group.to_dict())
     response.is_member = True
+    response.is_admin = True
     return response
 
 @router.post("/{group_id}/join")
@@ -143,4 +146,5 @@ async def get_study_group(
     
     response = StudyGroupResponse(**group.to_dict())
     response.is_member = membership is not None
+    response.is_admin = (membership is not None and membership.role == MemberRole.ADMIN)
     return response

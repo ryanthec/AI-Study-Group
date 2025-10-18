@@ -3,7 +3,7 @@ from sqlalchemy import and_, or_
 from fastapi import HTTPException, status
 from datetime import datetime, timedelta
 from typing import List, Optional
-from ..models.study_group import StudyGroup, StudyGroupStatus, StudyGroupType
+from ..models.study_group import StudyGroup, StudyGroupStatus
 from ..models.study_group_membership import StudyGroupMembership, MemberRole
 from ..models.study_group_message import StudyGroupMessage, MessageType
 from ..schemas.study_group import CreateStudyGroupRequest, UpdateStudyGroupRequest
@@ -23,25 +23,12 @@ class StudyGroupService:
                 detail="Maximum of 5 active group memberships allowed"
             )
 
-        # Calculate expiry for timed sessions
-        expires_at = None
-        if group_data.group_type == StudyGroupType.TIMED_SESSION:
-            if not group_data.session_duration_minutes:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Session duration required for timed sessions"
-                )
-            expires_at = datetime.utcnow() + timedelta(minutes=group_data.session_duration_minutes)
-
         # Create group
         db_group = StudyGroup(
             name=group_data.name,
             description=group_data.description,
             subject=group_data.subject,
             max_members=group_data.max_members,
-            group_type=group_data.group_type,
-            session_duration_minutes=group_data.session_duration_minutes,
-            expires_at=expires_at,
             creator_id=creator_id
         )
         
@@ -52,7 +39,8 @@ class StudyGroupService:
         membership = StudyGroupMembership(
             user_id=creator_id,
             group_id=db_group.id,
-            role=MemberRole.ADMIN
+            role=MemberRole.ADMIN,
+            is_active=True,
         )
         db.add(membership)
         
@@ -270,7 +258,7 @@ class StudyGroupService:
     def search_groups(db: Session, user_id: int, query: str = "", subject: str = "", page: int = 1, size: int = 10):
         offset = (page - 1) * size
         
-        # Base query for active groups that aren't full
+        # Base query for active groups
         db_query = db.query(StudyGroup).filter(
             StudyGroup.status == StudyGroupStatus.ACTIVE
         )
@@ -298,5 +286,6 @@ class StudyGroupService:
                 StudyGroupMembership.is_active == True
             ).first()
             group.is_member = membership is not None
+            group.is_admin = membership.role == MemberRole.ADMIN if membership else False
         
         return groups, total

@@ -6,13 +6,25 @@ import { Toaster } from 'react-hot-toast';
 
 import { AuthProvider } from './store/AuthContext';
 import { useAuth } from './hooks/useAuth';
+import './styles/globals.css';
+
+// Components
 import { Layout } from './components/layout/Layout';
+import { LoadingSpinner } from './components/common/LoadingSpinner';
+
+
+// Pages
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
 import { DashboardPage } from './pages/dashboard/DashboardPage';
-import { LoadingSpinner } from './components/common/LoadingSpinner';
+import { MyGroupsPage } from './pages/groups/MyGroupsPage';
+import { BrowseGroupsPage } from './pages/groups/BrowseGroupsPage';
+import { CreateGroupPage } from './pages/groups/CreateGroupPage';
+import { GroupDetailPage } from './pages/groups/GroupDetailPage';
+import { EditGroupPage } from './pages/groups/EditGroupPage';
 
-import './styles/globals.css';
+
+
 
 // Create React Query client
 const queryClient = new QueryClient({
@@ -96,6 +108,56 @@ const AppContent: React.FC = () => {
             <ProtectedRoute>
               <Layout>
                 <DashboardPage />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/groups"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <MyGroupsPage />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/groups/browse"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <BrowseGroupsPage />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/groups/create"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <CreateGroupPage />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/groups/:groupId"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <GroupDetailPage />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/groups/:groupId/edit"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <EditGroupPage />
               </Layout>
             </ProtectedRoute>
           }

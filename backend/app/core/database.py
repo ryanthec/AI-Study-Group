@@ -3,8 +3,6 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
 
-from ..models import user, study_group, study_group_membership, study_group_message
-
 # Database URL
 DATABASE_URL = os.getenv(
     "DATABASE_URL", 
@@ -28,11 +26,34 @@ def get_db():
     finally:
         db.close()
 
+def _import_all_models():
+    """
+    Import all model modules so that they register their tables
+    with Base.metadata before create_all/drop_all is invoked.
+    """
+    from ..models import user
+    from ..models import study_group
+    from ..models import study_group_membership
+    from ..models import study_group_message
+    from ..models import user_progress
+
 # Create tables
 def create_tables():
-    """Create database tables"""
+    """
+    DEV ONLY: Drops all tables and recreates them on startup.
+    Guarded by RESET_DB_ON_STARTUP env var.
+    """
     try:
+        _import_all_models()
+
+        reset = os.getenv("RESET_DB_ON_STARTUP", "true").lower() == "true"
+        if reset:
+            print("⚠️  RESET_DB_ON_STARTUP is enabled — dropping all tables...")
+            Base.metadata.drop_all(bind=engine)
+            print("✅ All tables dropped")
+
+        print("🛠️  Creating database tables...")
         Base.metadata.create_all(bind=engine)
-        print("Database tables created successfully")
+        print("✅ Database tables created successfully")
     except Exception as e:
-        print(f"Error creating tables: {e}")
+        print(f"❌ Error creating tables: {e}")

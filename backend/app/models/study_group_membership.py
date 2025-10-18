@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, ForeignKey, DateTime, Boolean, Enum
 from sqlalchemy.orm import relationship
+from sqlalchemy.dialects.postgresql import UUID
 from datetime import datetime, timezone
 import enum
 from ..core.database import Base
@@ -12,7 +13,7 @@ class StudyGroupMembership(Base):
     __tablename__ = "study_group_memberships"
 
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     group_id = Column(Integer, ForeignKey("study_groups.id"), nullable=False)
     role = Column(Enum(MemberRole), default=MemberRole.MEMBER)
     joined_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc))

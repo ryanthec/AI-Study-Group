@@ -1,12 +1,15 @@
+// components/layout/Navbar.tsx
 import React from 'react';
-import { Layout, Menu, Avatar, Dropdown, Button, Space, Typography } from 'antd';
-import { 
-  UserOutlined, 
-  LogoutOutlined, 
+import { Layout, Menu, Avatar, Dropdown, Space, Typography } from 'antd';
+import {
+  HomeOutlined,
+  TeamOutlined,
+  SearchOutlined,
+  UserOutlined,
+  LogoutOutlined,
   SettingOutlined,
-  BookOutlined,
-  BellOutlined
 } from '@ant-design/icons';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import type { MenuProps } from 'antd';
 
@@ -14,115 +17,107 @@ const { Header } = Layout;
 const { Text } = Typography;
 
 export const Navbar: React.FC = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
   const { user, logout } = useAuth();
 
-  // User dropdown menu items
+  const menuItems: MenuProps['items'] = [
+    { key: '/dashboard', icon: <HomeOutlined />, label: 'Dashboard' },
+    { key: '/groups', icon: <TeamOutlined />, label: 'My Groups' },
+    { key: '/groups/browse', icon: <SearchOutlined />, label: 'Browse Groups' },
+  ];
+
   const userMenuItems: MenuProps['items'] = [
-    {
-      key: 'profile',
-      icon: <UserOutlined />,
-      label: 'Profile',
-    },
-    {
-      key: 'settings',
-      icon: <SettingOutlined />,
-      label: 'Settings',
-    },
-    {
-      type: 'divider',
-    },
-    {
-      key: 'logout',
-      icon: <LogoutOutlined />,
-      label: 'Logout',
-      onClick: logout,
-    },
+    { key: 'profile', icon: <UserOutlined />, label: 'Profile', onClick: () => navigate('/profile') },
+    { key: 'settings', icon: <SettingOutlined />, label: 'Settings', onClick: () => navigate('/settings') },
+    { type: 'divider' },
+    { key: 'logout', icon: <LogoutOutlined />, label: 'Logout', onClick: logout },
   ];
 
   return (
-    <Header 
-      style={{ 
-        background: '#fff', 
+    <Header
+      style={{
+        display: 'flex',
+        alignItems: 'center',
         padding: '0 24px',
+        background: '#fff',
         borderBottom: '1px solid #f0f0f0',
-        position: 'sticky',
-        top: 0,
-        zIndex: 1000,
-        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)'
+        gap: 16,
       }}
     >
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center',
-        height: '100%'
-      }}>
-        {/* Logo and Title */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <BookOutlined style={{ fontSize: '24px', color: '#1890ff' }} />
-          <Text strong style={{ fontSize: '18px', color: '#1890ff' }}>
-            AI Study Group
-          </Text>
-        </div>
+      {/* Left: Brand */}
+      <div
+        style={{
+          fontSize: 20,
+          fontWeight: 600,
+          cursor: 'pointer',
+          whiteSpace: 'nowrap',
+          flex: '0 0 auto',
+        }}
+        onClick={() => navigate('/dashboard')}
+      >
+        AI Study Group
+      </div>
 
-        {/* Navigation Menu */}
+      {/* Middle: Tabs that can shrink and ellipsize */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          flex: '1 1 auto',
+          minWidth: 0,
+        }}
+      >
         <Menu
           mode="horizontal"
-          defaultSelectedKeys={['dashboard']}
-          style={{ 
-            border: 'none',
-            background: 'transparent',
-            minWidth: '200px'
-          }}
-          items={[
-            {
-              key: 'dashboard',
-              label: 'Dashboard',
-            },
-            {
-              key: 'study-groups',
-              label: 'Study Groups',
-            },
-            {
-              key: 'my-groups',
-              label: 'My Groups',
-            },
+          selectedKeys={[
+            location.pathname.startsWith('/groups')
+              ? location.pathname.includes('/browse')
+                ? '/groups/browse'
+                : '/groups'
+              : location.pathname,
           ]}
+          items={menuItems}
+          onClick={({ key }) => navigate(key)}
+          style={{
+            flex: '1 1 auto',
+            minWidth: 0,
+            border: 'none',
+            overflow: 'hidden',              // let items compress
+          }}
         />
-
-        {/* User Section */}
-        <Space size="middle">
-          {/* Notifications */}
-          <Button
-            type="text"
-            icon={<BellOutlined />}
-            size="large"
-            style={{ color: '#666' }}
-          />
-
-          {/* User Info and Dropdown */}
-          <Space>
-            <Text style={{ color: '#666' }}>
-              Welcome, <strong>{user?.firstName}</strong>
-            </Text>
-            <Dropdown
-              menu={{ items: userMenuItems }}
-              placement="bottomRight"
-              arrow
-            >
-              <Avatar
-                size="default"
-                src={user?.avatar}
-                icon={<UserOutlined />}
-                style={{ 
-                  cursor: 'pointer',
-                  border: '2px solid #1890ff'
-                }}
-              />
-            </Dropdown>
-          </Space>
-        </Space>
       </div>
+
+      {/* Right: Profile gets priority width and can take space from tabs */}
+      <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" trigger={['click']}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            cursor: 'pointer',
+            flex: '0 1 10%',                // allow this block to take up to 40% width
+            minWidth: 150,                  // ensure it doesn't collapse too small
+            justifyContent: 'flex-end',     // keep right aligned visually
+          }}
+        >
+          <Avatar icon={<UserOutlined />} src={user?.avatar} />
+          <span
+            style={{
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              lineHeight: '1',
+              display: 'inline-block',
+              width: '100%',                // use all available space from flex
+              textAlign: 'left',            // text flows immediately after avatar
+            }}
+            title={user?.username}
+          >
+            {user?.username}
+          </span>
+        </div>
+      </Dropdown>
     </Header>
   );
 };
