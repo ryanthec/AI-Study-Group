@@ -1,15 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-  Card,
-  Button,
-  Space,
-  Typography,
-  Tag,
-  Descriptions,
-  message,
-  Modal,
-} from 'antd';
+import { Card, Button, Space, Typography, Tag, Descriptions, message, Modal, } from 'antd';
 import {
   ArrowLeftOutlined,
   SettingOutlined,
@@ -18,6 +9,7 @@ import {
   CrownOutlined,
 } from '@ant-design/icons';
 import { studyGroupService } from '../../services/studyGroup.service';
+import { ChatBox } from '../../components/chat/ChatBox';
 import type { StudyGroup } from '../../types/studyGroup.types';
 
 const { Title, Text } = Typography;
@@ -153,11 +145,9 @@ export const GroupDetailPage: React.FC = () => {
           </Descriptions>
         </Card>
 
-        {/* Placeholder for chat interface */}
-        <Card title="Group Chat" style={{ minHeight: 400 }}>
-          <div style={{ textAlign: 'center', padding: '60px 0' }}>
-            <Text type="secondary">Chat interface coming soon...</Text>
-          </div>
+        {/* Chat Interface */}
+        <Card title="Group Chat" style={{ height: 600 }} bodyStyle={{ height: 'calc(100% - 57px)', padding: 0 }}>
+          <ChatBox groupId={Number(groupId)} />
         </Card>
       </Space>
     </div>

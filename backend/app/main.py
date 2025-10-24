@@ -5,7 +5,7 @@ import os
 
 from .core.database import engine, create_tables
 from .config import settings
-from .api.v1 import auth, study_groups, dashboard
+from .api.v1 import auth, study_groups, dashboard, chat
 from .models import user  # Import to register models
 
 # Create tables on startup
@@ -38,6 +38,7 @@ async def health_check():
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(study_groups.router, prefix="/api/v1")
 app.include_router(dashboard.router, prefix="/api/v1")
+app.include_router(chat.router, prefix="/api/v1")
 
 # Root endpoint
 @app.get("/")
