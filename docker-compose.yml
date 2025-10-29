@@ -69,6 +69,8 @@ services:
     networks:
       - ai-study-group-network
     restart: unless-stopped
+    env_file:
+      - ./backend/.env
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -89,6 +91,8 @@ services:
       - "3000:5173"
     depends_on:
       - backend
+    env_file:
+      - ./frontend/.env
     networks:
       - ai-study-group-network
     restart: unless-stopped

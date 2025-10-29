@@ -36,6 +36,7 @@ def _import_all_models():
     from ..models import study_group_membership
     from ..models import study_group_message
     from ..models import user_progress
+    from ..models import group_invitation
 
 # Create tables
 def create_tables():

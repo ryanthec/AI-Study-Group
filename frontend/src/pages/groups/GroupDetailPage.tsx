@@ -7,10 +7,12 @@ import {
   LogoutOutlined,
   DeleteOutlined,
   CrownOutlined,
+  UserAddOutlined,
 } from '@ant-design/icons';
 import { studyGroupService } from '../../services/studyGroup.service';
 import { ChatBox } from '../../components/chat/ChatBox';
 import type { StudyGroup } from '../../types/studyGroup.types';
+import { InviteMemberModal } from '../../components/email/InviteMemberModal';
 
 const { Title, Text } = Typography;
 
@@ -19,6 +21,7 @@ export const GroupDetailPage: React.FC = () => {
   const navigate = useNavigate();
   const [group, setGroup] = useState<StudyGroup | null>(null);
   const [loading, setLoading] = useState(true);
+  const [inviteModalVisible, setInviteModalVisible] = useState(false);
 
   useEffect(() => {
     if (groupId) {
@@ -110,6 +113,21 @@ export const GroupDetailPage: React.FC = () => {
                 >
                   Settings
                 </Button>
+                <Button 
+                  type="primary" 
+                  icon={<UserAddOutlined />}
+                  onClick={() => setInviteModalVisible(true)}
+                >
+                  Invite Member
+                </Button>
+                <InviteMemberModal
+                    groupId={Number(groupId)}
+                    visible={inviteModalVisible}
+                    onClose={() => setInviteModalVisible(false)}
+                    onSuccess={() => {
+                      // Optionally refresh members list
+                    }}
+                  />
                 <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>
                   Delete Group
                 </Button>
@@ -121,6 +139,8 @@ export const GroupDetailPage: React.FC = () => {
               </Button>
             )}
           </Space>
+
+
         </div>
 
         <Card>

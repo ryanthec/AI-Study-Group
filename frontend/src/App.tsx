@@ -22,7 +22,7 @@ import { BrowseGroupsPage } from './pages/groups/BrowseGroupsPage';
 import { CreateGroupPage } from './pages/groups/CreateGroupPage';
 import { GroupDetailPage } from './pages/groups/GroupDetailPage';
 import { EditGroupPage } from './pages/groups/EditGroupPage';
-
+import { AcceptInvitationPage } from './pages/groups/AcceptInvitationPage';
 
 
 
@@ -162,6 +162,8 @@ const AppContent: React.FC = () => {
             </ProtectedRoute>
           }
         />
+
+        <Route path="/invitations/accept" element={<AcceptInvitationPage />} />
 
         {/* Default redirect */}
         <Route path="/" element={<Navigate to="/dashboard" replace />} />

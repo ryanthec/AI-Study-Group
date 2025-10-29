@@ -11,16 +11,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Copy dependency files (choose one method: requirements.txt or Poetry)
-# If using requirements.txt:
+# Copy dependency files
 COPY requirements.txt /app/requirements.txt
 RUN pip install --upgrade pip && pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt
-
-# If using Poetry instead, comment the above and use:
-# COPY pyproject.toml poetry.lock* /app/
-# RUN pip install --upgrade pip poetry && \
-# poetry export -f requirements.txt --output requirements.txt --without-hashes && \
-# pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt
 
 
 # ========== Runtime stage ==========
@@ -57,7 +50,7 @@ COPY app /app/app
 # COPY alembic.ini /app/alembic.ini
 # COPY alembic /app/alembic
 
-# Set environment defaults (override via docker-compose or k8s)
+# Set environment defaults
 ENV ENVIRONMENT=production
 ENV HOST=0.0.0.0
 

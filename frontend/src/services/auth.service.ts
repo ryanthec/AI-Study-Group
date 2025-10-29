@@ -11,8 +11,19 @@ export const authService = {
 
   // Register user
   register: async (userData: RegisterRequest): Promise<AuthResponse> => {
-    const response = await api.post('/auth/register', userData);
-    return response.data;
+    try {
+      const response = await api.post('/auth/register', userData);
+      return response.data;
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail;
+      if (typeof detail === 'string') {
+        throw new Error(detail);
+      }
+      if (detail?.message) {
+        throw new Error(detail.message);
+      }
+      throw new Error('Registration failed');
+    }
   },
 
   // Get current user

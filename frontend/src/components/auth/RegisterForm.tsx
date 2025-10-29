@@ -1,5 +1,5 @@
 import React from 'react';
-import { Form, Input, Button, Typography, Space, Row, Col } from 'antd';
+import { Form, Input, Button, Typography, Space, Row, Col, message } from 'antd';
 import { UserOutlined, LockOutlined, MailOutlined } from '@ant-design/icons';
 import { useAuth } from '../../hooks/useAuth';
 import type { RegisterRequest } from '../../types/auth.types';
@@ -17,8 +17,8 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSwitchToLogin }) =
   const onFinish = async (values: RegisterRequest) => {
     try {
       await register(values);
-    } catch (error) {
-      // Error is handled in the auth context
+    } catch (error: any) {
+      message.error(error?.message || 'Registration failed');
     }
   };
 
