@@ -1,7 +1,7 @@
 services:
   # PostgreSQL Database
   postgres:
-    image: postgres:17-alpine
+    image: pgvector/pgvector:pg17
     container_name: ai-study-group-db
     environment:
       POSTGRES_DB: ai_study_group
@@ -21,6 +21,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    command: >
+      postgres
+      -c shared_preload_libraries=vector
 
 
   # Redis for caching and session management

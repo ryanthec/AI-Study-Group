@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
@@ -37,6 +37,8 @@ def _import_all_models():
     from ..models import study_group_message
     from ..models import user_progress
     from ..models import group_invitation
+    from ..models.document_embedding import Document, DocumentChunk
+    from ..models.conversation_embedding import ConversationChunk
 
 # Create tables
 def create_tables():
@@ -45,6 +47,13 @@ def create_tables():
     Guarded by RESET_DB_ON_STARTUP env var.
     """
     try:
+
+        # Enable pgvector extension
+        # with engine.connect() as conn:
+        #     conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        #     conn.commit()
+        # print("✅ pgvector extension enabled")
+
         _import_all_models()
 
         reset = os.getenv("RESET_DB_ON_STARTUP", "true").lower() == "true"

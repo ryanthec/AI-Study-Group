@@ -35,6 +35,7 @@ class StudyGroup(Base):
     memberships = relationship("StudyGroupMembership", back_populates="group", cascade="all, delete-orphan")
     messages = relationship("StudyGroupMessage", back_populates="group", cascade="all, delete-orphan")
     invitations = relationship("GroupInvitation", back_populates="group", cascade="all, delete-orphan")
+    documents = relationship("Document", back_populates="group", cascade="all, delete-orphan")
 
     def to_dict(self):
         return {

@@ -25,6 +25,7 @@ async def get_dashboard_stats(
         StudyGroup.status == StudyGroupStatus.ACTIVE
     ).count()
 
+    # TODO Change this to Quizzes completed when that feature is implemented
     sessions_completed = ProgressService.get_sessions_completed(db, current_user.id)
 
     return {

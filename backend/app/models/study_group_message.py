@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from datetime import datetime, timezone
@@ -19,6 +19,7 @@ class StudyGroupMessage(Base):
     content = Column(Text, nullable=False)
     message_type = Column(Enum(MessageType), default=MessageType.TEXT)
     created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc))
+    is_embedded = Column(Boolean, default=False)
 
     # Relationships
     group = relationship("StudyGroup", back_populates="messages")
