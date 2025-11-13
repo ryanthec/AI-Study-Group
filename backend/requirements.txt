@@ -30,3 +30,7 @@ google-genai>=1.0.0
 
 # Logging (optional - you can remove if not using structured logs)
 structlog>=23.2.0
+
+
+# Misc
+python-dotenv>=1.0.1
