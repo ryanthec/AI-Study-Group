@@ -49,10 +49,10 @@ def create_tables():
     try:
 
         # Enable pgvector extension
-        # with engine.connect() as conn:
-        #     conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        #     conn.commit()
-        # print("✅ pgvector extension enabled")
+        with engine.connect() as conn:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            conn.commit()
+        print("✅ pgvector extension enabled")
 
         _import_all_models()
 

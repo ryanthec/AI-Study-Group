@@ -9,6 +9,80 @@ from ..models.study_group_message import StudyGroupMessage, MessageType
 from ..schemas.study_group import CreateStudyGroupRequest, UpdateStudyGroupRequest
 
 class StudyGroupService:
+
+    active_chat_sessions = {}
+    
+    @staticmethod
+    def mark_user_online(group_id: int, user_id: int):
+        """Mark user as online in a specific group"""
+        key = (group_id, user_id)
+        StudyGroupService.active_chat_sessions[key] = datetime.utcnow()
+    
+    @staticmethod
+    def mark_user_offline(group_id: int, user_id: int):
+        """Mark user as offline in a specific group"""
+        key = (group_id, user_id)
+        if key in StudyGroupService.active_chat_sessions:
+            del StudyGroupService.active_chat_sessions[key]
+    
+    @staticmethod
+    def is_user_online(group_id: int, user_id: int) -> bool:
+        """Check if user is online in a specific group"""
+        key = (group_id, user_id)
+        if key not in StudyGroupService.active_chat_sessions:
+            return False
+        
+        # Consider offline if session is older than 5 minutes
+        last_active = StudyGroupService.active_chat_sessions[key]
+        timeout = datetime.utcnow() - timedelta(minutes=5)
+        
+        if last_active < timeout:
+            del StudyGroupService.active_chat_sessions[key]
+            return False
+        
+        return True
+    
+    @staticmethod
+    def get_group_members_with_status(db: Session, group_id: int, current_user_id: int):
+        """Get all members with their current online status"""
+        from ..models.user import User
+        
+        # Verify user is a member
+        membership = db.query(StudyGroupMembership).filter(
+            StudyGroupMembership.group_id == group_id,
+            StudyGroupMembership.user_id == current_user_id,
+            StudyGroupMembership.is_active == True
+        ).first()
+        
+        if not membership:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You are not a member of this study group"
+            )
+        
+        # Get all active members
+        members = db.query(StudyGroupMembership).filter(
+            StudyGroupMembership.group_id == group_id,
+            StudyGroupMembership.is_active == True
+        ).all()
+        
+        members_data = []
+        for member in members:
+            user = member.user
+            is_online = StudyGroupService.is_user_online(group_id, user.id)
+            
+            members_data.append({
+                "id": str(user.id),
+                "username": user.username,
+                "email": user.email,
+                "avatar": getattr(user, 'avatar_url', None),
+                "role": member.role.value,
+                "joinedAt": member.created_at.isoformat() if hasattr(member, 'created_at') else None,
+                "isOnline": is_online
+            })
+        
+        return members_data
+
     @staticmethod
     def create_group(db: Session, group_data: CreateStudyGroupRequest, creator_id: int) -> StudyGroup:
         # Check user's group limit (max 5 active memberships)
@@ -289,3 +363,5 @@ class StudyGroupService:
             group.is_admin = membership.role == MemberRole.ADMIN if membership else False
         
         return groups, total
+
+

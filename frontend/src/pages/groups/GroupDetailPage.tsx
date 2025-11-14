@@ -1,32 +1,46 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Button, Space, Typography, Tag, Descriptions, message, Modal, } from 'antd';
-import {
-  ArrowLeftOutlined,
-  SettingOutlined,
-  LogoutOutlined,
-  DeleteOutlined,
-  CrownOutlined,
-  UserAddOutlined,
-} from '@ant-design/icons';
+import { Layout, Button, message, Modal, Spin } from 'antd';
+import { ArrowLeftOutlined } from '@ant-design/icons';
 import { studyGroupService } from '../../services/studyGroup.service';
-import { ChatBox } from '../../components/chat/ChatBox';
-import type { StudyGroup } from '../../types/studyGroup.types';
+import { StudyGroupSidebar } from '../../components/studyGroup/StudyGroupSidebar';
+import { GroupDetailsTab } from '../../components/studyGroup/GroupDetailsTab';
+import { ChatTab } from '../../components/studyGroup/ChatTab';
+import { DocumentsTab } from '../../components/studyGroup/DocumentsTab';
 import { InviteMemberModal } from '../../components/email/InviteMemberModal';
-
-const { Title, Text } = Typography;
+import type { StudyGroup } from '../../types/studyGroup.types';
+import { useAuth } from '../../hooks/useAuth';
 
 export const GroupDetailPage: React.FC = () => {
   const { groupId } = useParams<{ groupId: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
+
   const [group, setGroup] = useState<StudyGroup | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'details' | 'chat' | 'documents'>('details');
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
+  const [members, setMembers] = useState<any[]>([]);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [onlineMembers, setOnlineMembers] = useState(0);
 
   useEffect(() => {
     if (groupId) {
       loadGroup();
+      loadMembers();
     }
+  }, [groupId]);
+
+  // Poll member status every 10 seconds to update online count
+  useEffect(() => {
+    if (!groupId) return;
+
+    const interval = setInterval(() => {
+      // Silently refresh member list to update online status
+      loadMembersQuietly();
+    }, 10000); // Poll every 10 seconds
+
+    return () => clearInterval(interval);
   }, [groupId]);
 
   const loadGroup = async () => {
@@ -39,6 +53,34 @@ export const GroupDetailPage: React.FC = () => {
       navigate('/groups');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMembers = async () => {
+    try {
+      setMembersLoading(true);
+      const membersList = await studyGroupService.getGroupMembers(Number(groupId));
+      setMembers(membersList);
+      // Count online members
+      const onlineCount = membersList.filter((m: any) => m.isOnline).length;
+      setOnlineMembers(onlineCount);
+    } catch (error) {
+      console.log('Could not load members', error);
+    } finally {
+      setMembersLoading(false);
+    }
+  };
+
+   // Silent refresh without showing loading spinner
+  const loadMembersQuietly = async () => {
+    try {
+      const membersList = await studyGroupService.getGroupMembers(Number(groupId));
+      setMembers(membersList);
+      const onlineCount = membersList.filter((m: any) => m.isOnline).length;
+      setOnlineMembers(onlineCount);
+    } catch (error) {
+      // Silently fail - don't show error to user
+      console.log('Background member refresh failed', error);
     }
   };
 
@@ -63,7 +105,8 @@ export const GroupDetailPage: React.FC = () => {
   const handleDelete = () => {
     Modal.confirm({
       title: 'Delete Study Group',
-      content: 'Are you sure you want to delete this study group? This action cannot be undone.',
+      content:
+        'Are you sure you want to delete this study group? This action cannot be undone.',
       okText: 'Delete',
       okType: 'danger',
       onOk: async () => {
@@ -78,98 +121,106 @@ export const GroupDetailPage: React.FC = () => {
     });
   };
 
-  if (loading) {
-    return <Card loading />;
-  }
+  const handleEdit = () => {
+    navigate(`/groups/${groupId}/edit`);
+  };
 
-  if (!group) {
-    return null;
-  }
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'chat':
+        return <ChatTab groupId={Number(groupId)} />;
+      case 'documents':
+        return (
+          <DocumentsTab
+            groupId={Number(groupId)}
+            isAdmin={group?.is_admin || false}
+            currentUserId={user?.id || ''}
+          />
+        );
+      case 'details':
+      default:
+        return (
+          <GroupDetailsTab
+            group={group}
+            loading={loading}
+            members={members}
+            membersLoading={membersLoading}
+          />
+        );
+    }
+  };
 
   return (
-    <div style={{ padding: '24px', maxWidth: 1200, margin: '0 auto' }}>
-      <Space direction="vertical" size="large" style={{ width: '100%' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Space>
-            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/groups')}>
-              Back
-            </Button>
-            <Title level={2} style={{ margin: 0 }}>
-              {group.name}
-            </Title>
-            {group.is_admin && (
-              <Tag color="gold" icon={<CrownOutlined />}>
-                Admin
-              </Tag>
-            )}
-          </Space>
+    <Layout style={{ minHeight: '100vh', marginTop: '64px' }}>
+      {/* Header */}
+      <Layout.Header
+        style={{
+          background: '#fff',
+          borderBottom: '1px solid #f0f0f0',
+          padding: '0 24px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '16px',
+          height: '64px',
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 100,
+        }}
+      >
+        <Button
+          type="text"
+          icon={<ArrowLeftOutlined />}
+          onClick={() => navigate('/groups')}
+        >
+          Back to Groups
+        </Button>
+        <h2 style={{ margin: 0, flex: 1 }}>
+          {loading ? 'Loading...' : group?.name}
+        </h2>
+      </Layout.Header>
 
-          <Space>
-            {group.is_admin && (
-              <>
-                <Button
-                  icon={<SettingOutlined />}
-                  onClick={() => navigate(`/groups/${groupId}/edit`)}
-                >
-                  Settings
-                </Button>
-                <Button 
-                  type="primary" 
-                  icon={<UserAddOutlined />}
-                  onClick={() => setInviteModalVisible(true)}
-                >
-                  Invite Member
-                </Button>
-                <InviteMemberModal
-                    groupId={Number(groupId)}
-                    visible={inviteModalVisible}
-                    onClose={() => setInviteModalVisible(false)}
-                    onSuccess={() => {
-                      // Optionally refresh members list
-                    }}
-                  />
-                <Button danger icon={<DeleteOutlined />} onClick={handleDelete}>
-                  Delete Group
-                </Button>
-              </>
-            )}
-            {!group.is_admin && (
-              <Button danger icon={<LogoutOutlined />} onClick={handleLeave}>
-                Leave Group
-              </Button>
-            )}
-          </Space>
+      {/* Sidebar Navigation */}
+      {!loading && group && (
+        <StudyGroupSidebar
+          groupId={Number(groupId)}
+          group={group}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          onEdit={handleEdit}
+          onInvite={() => setInviteModalVisible(true)}
+          onDelete={handleDelete}
+          onLeave={handleLeave}
+          onlineMembers={onlineMembers}
+        />
+      )}
 
+      {/* Main Content */}
+      <Layout.Content
+        style={{
+          marginLeft: 250,
+          marginTop: '64px',
+          background: '#f5f5f5',
+          minHeight: 'calc(100vh - 128px)',
+          overflowY: 'auto',
+        }}
+      >
+        {loading ? <Spin /> : renderContent()}
+      </Layout.Content>
 
-        </div>
-
-        <Card>
-          <Descriptions column={2} bordered>
-            <Descriptions.Item label="Description" span={2}>
-              {group.description || 'No description'}
-            </Descriptions.Item>
-            <Descriptions.Item label="Subject">
-              {group.subject ? <Tag>{group.subject}</Tag> : 'None'}
-            </Descriptions.Item>
-            <Descriptions.Item label="Status">
-              <Tag color={group.status === 'active' ? 'green' : 'default'}>
-                {group.status}
-              </Tag>
-            </Descriptions.Item>
-            <Descriptions.Item label="Members">
-              {group.member_count}/{group.max_members}
-            </Descriptions.Item>
-            <Descriptions.Item label="Created">
-              {new Date(group.created_at).toLocaleString()}
-            </Descriptions.Item>
-          </Descriptions>
-        </Card>
-
-        {/* Chat Interface */}
-        <Card title="Group Chat" style={{ height: 600 }} bodyStyle={{ height: 'calc(100% - 57px)', padding: 0 }}>
-          <ChatBox groupId={Number(groupId)} />
-        </Card>
-      </Space>
-    </div>
+      {/* Invite Modal */}
+      {group && (
+        <InviteMemberModal
+          visible={inviteModalVisible}
+          groupId={Number(groupId)}
+          onClose={() => setInviteModalVisible(false)}
+          onSuccess={() => {
+            loadMembers();
+            setInviteModalVisible(false);
+          }}
+        />
+      )}
+    </Layout>
   );
 };

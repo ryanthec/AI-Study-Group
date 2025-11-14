@@ -94,4 +94,36 @@ export const studyGroupService = {
     const { data } = await api.post('/dashboard/sessions/increment');
     return data.sessions_completed as number;
   },
+
+  // Get members of a study group
+  getGroupMembers: async (groupId: number, includeOnlineStatus: boolean = true): Promise<any[]> => {
+    const response = await api.get(`/study-groups/${groupId}/members`, {
+      params: { include_online_status: includeOnlineStatus }
+    });
+    return response.data;
+  },
+
+  // Upload document to study group
+  uploadDocument: async (groupId: number, file: File): Promise<any> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    const response = await api.post(`/documents/upload/${groupId}`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  // Get all documents in a study group
+  getGroupDocuments: async (groupId: number): Promise<any[]> => {
+    const response = await api.get(`/documents/group/${groupId}`);
+    return response.data;
+  },
+
+  // Delete a document
+  deleteDocument: async (groupId: number, documentId: number): Promise<void> => {
+    await api.delete(`/documents/${documentId}/group/${groupId}`);
+  },
 };

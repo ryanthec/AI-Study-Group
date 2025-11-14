@@ -123,16 +123,33 @@ class DocumentService:
         return results
     
     @staticmethod
-    def delete_document(db: Session, document_id: int) -> bool:
+    def delete_document(db: Session, document_id: int, group_id: int) -> bool:
         """Delete document and all its chunks"""
-        document = db.query(Document).filter(Document.id == document_id).first()
+        document = db.query(Document).filter(
+            Document.id == document_id,
+            Document.group_id == group_id
+        ).first()
+        
         if document:
-            # Delete file from storage
-            if os.path.exists(document.file_path):
-                os.remove(document.file_path)
-            
             # Cascade will delete chunks automatically
             db.delete(document)
             db.commit()
             return True
+        
         return False
+
+
+    @staticmethod
+    def get_group_documents(db: Session, group_id: int) -> List[Document]:
+        """Get all documents for a study group"""
+        return db.query(Document).filter(
+            Document.group_id == group_id
+        ).order_by(Document.created_at.desc()).all()
+
+    @staticmethod
+    def get_document_by_id(db: Session, document_id: int, group_id: int) -> Optional[Document]:
+        """Get a specific document"""
+        return db.query(Document).filter(
+            Document.id == document_id,
+            Document.group_id == group_id
+        ).first()

@@ -1,5 +1,6 @@
 # app/services/embedding_service.py
 from google import genai
+from google.genai import types
 from typing import List, Optional
 import os
 import numpy as np
@@ -15,7 +16,8 @@ class EmbeddingService:
         try:
             result = self.client.models.embed_content(
                 model=self.model,
-                contents=text
+                contents=text,
+                config=types.EmbedContentConfig(output_dimensionality=768)
             )
             # Extract the embedding values
             embedding = result.embeddings[0].values
@@ -29,7 +31,8 @@ class EmbeddingService:
         try:
             result = self.client.models.embed_content(
                 model=self.model,
-                contents=texts
+                contents=texts,
+                config=types.EmbedContentConfig(output_dimensionality=768)
             )
             # Extract all embeddings
             embeddings = [list(emb.values) for emb in result.embeddings]

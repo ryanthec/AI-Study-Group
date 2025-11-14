@@ -1,10 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Input, Button, Avatar, Typography, Space, Tag, Spin } from 'antd';
-import { SendOutlined, UserOutlined, RobotOutlined } from '@ant-design/icons';
+import { SendOutlined, UserOutlined, RobotOutlined, PaperClipOutlined, LoadingOutlined } from '@ant-design/icons';
+import { message } from 'antd';
+
+
 import { chatService } from '../../services/chat.service';
 import { useAuth } from '../../hooks/useAuth';
 import type { ChatMessage } from '../../types/message.types';
-import { message } from 'antd';
+import { studyGroupService } from '../../services/studyGroup.service';
 
 const { Text } = Typography;
 
@@ -12,18 +15,29 @@ interface ChatBoxProps { groupId: number; }
 
 export const ChatBox: React.FC<ChatBoxProps> = ({ groupId }) => {
   const { user } = useAuth();
+
+  // states for messages and connection
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
+
+  // useStates & refs for document file upload
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // refs for WebSocket and connection state
   const wsRef = useRef<WebSocket | null>(null);
-  const readyRef = useRef(false);          // single source of truth for OPEN
+  const readyRef = useRef(false); // single source of truth for OPEN
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+
 
   const isOpen = () => readyRef.current;   // gate send on this
 
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
 
+  // useEffect to load message history and setup WebSocket
   useEffect(() => {
     let cancelled = false;
 
@@ -82,6 +96,8 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId }) => {
 
   useEffect(() => { scrollToBottom(); }, [messages]);
 
+
+  // Handle sending messages
   const handleSend = () => {
     const text = inputValue.trim();
     if (!text) return;
@@ -98,6 +114,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId }) => {
     }
   };
 
+  // Handle key down for input (send on Enter)
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -105,6 +122,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId }) => {
     }
   };
 
+  // Render a single message
   const renderMessage = (message: ChatMessage) => {
     const isOwn = message.user?.id === user?.id;
     const isSystem = message.message_type === 'system';
@@ -158,6 +176,39 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId }) => {
     );
   };
 
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      message.error('File size exceeds 10MB limit');
+      return;
+    }
+
+    const allowedExtensions = ['.pdf', '.txt', '.docx', '.doc', '.md'];
+    const fileName = file.name.toLowerCase();
+    const hasValidExtension = allowedExtensions.some(ext => fileName.endsWith(ext));
+
+    if (!hasValidExtension) {
+      message.error(`Unsupported file format. Allowed: ${allowedExtensions.join(', ')}`);
+      return;
+    }
+
+    setUploading(true);
+    try {
+      await studyGroupService.uploadDocument(groupId, file);
+      message.success(`Document "${file.name}" uploaded successfully`);
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || 'Failed to upload document');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
       {/* Status */}
@@ -204,6 +255,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId }) => {
             disabled={!connected}
             size="large"
           />
+          {/* Send button */}
           <Button
             type="primary"
             icon={<SendOutlined />}
@@ -213,6 +265,25 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId }) => {
           >
             Send
           </Button>
+
+          {/* File upload */}
+          <div style={{ marginTop: '8px' }}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              onChange={handleFileSelect}
+              style={{ display: 'none' }}
+              accept=".pdf,.txt,.docx,.doc,.md"
+            />
+            <Button
+              icon={uploading ? <LoadingOutlined /> : <PaperClipOutlined />}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              loading={uploading}
+            >
+              Attach Document
+            </Button>
+          </div>
         </Space.Compact>
       </div>
     </div>

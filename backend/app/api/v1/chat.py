@@ -7,6 +7,7 @@ from ...services.message_service import MessageService
 from ...models.study_group_membership import StudyGroupMembership
 from ...models.study_group_message import MessageType
 from ...models.user import User
+from ...services.study_group_service import StudyGroupService
 import json
 from jose import jwt, JWTError
 from ...config import settings
@@ -42,6 +43,9 @@ async def websocket_endpoint(websocket: WebSocket, group_id: int, db: Session = 
     if not membership:
         await websocket.close(code=1008, reason="Not a member"); return
 
+    # Mark user as online
+    StudyGroupService.mark_user_online(group_id, user.id)
+
     # Register the (now-accepted) connection
     await manager.register(websocket, group_id)  # see manager change below
 
@@ -74,7 +78,9 @@ async def websocket_endpoint(websocket: WebSocket, group_id: int, db: Session = 
             db=db, group_id=group_id, user_id=None,
             content=f"{user.username} left the chat", message_type=MessageType.SYSTEM
         )
+        StudyGroupService.mark_user_offline(group_id, user.id)
         await manager.broadcast_to_group(MessageService.format_message_for_ws(leave, db), group_id)
+
 
 @router.get("/{group_id}/messages")
 async def get_messages(

@@ -148,3 +148,28 @@ async def get_study_group(
     response.is_member = membership is not None
     response.is_admin = (membership is not None and membership.role == MemberRole.ADMIN)
     return response
+
+
+# Get group members with optional online status
+@router.get("/{group_id}/members")
+async def get_group_members(
+    group_id: int,
+    include_online_status: bool = Query(True, description="Include online status"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get all members of a study group with optional online status"""
+    if include_online_status:
+        members = StudyGroupService.get_group_members_with_status(
+            db, 
+            group_id, 
+            current_user.id
+        )
+    else:
+        members = StudyGroupService.get_group_members(
+            db, 
+            group_id, 
+            current_user.id
+        )
+    
+    return members
