@@ -1,17 +1,40 @@
 import React from 'react';
 import { Card } from 'antd';
 import { ChatBox } from '../chat/ChatBox';
+import { useTheme } from '../../hooks/useTheme';
 
 interface ChatTabProps {
   groupId: number;
 }
 
 export const ChatTab: React.FC<ChatTabProps> = ({ groupId }) => {
+  const { isDark } = useTheme();
+
   return (
-    <div style={{ padding: '24px', height: 'calc(100vh - 120px)' }}>
+    <div
+      style={{
+        padding: '24px',
+        height: 'calc(100vh - 64px)', // Fixed height: viewport minus navbar
+        overflow: 'hidden',
+      }}
+    >
       <Card
-        style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
-        bodyStyle={{ flex: 1, display: 'flex', flexDirection: 'column' }}
+        style={{
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          boxShadow: isDark
+            ? '0 2px 8px rgba(0, 0, 0, 0.45)'
+            : '0 1px 4px rgba(0, 0, 0, 0.08)',
+          border: isDark ? '1px solid #434343' : '1px solid #f0f0f0',
+          borderRadius: '8px',
+        }}
+        styles = {{ body: {
+          flex: 1,
+          padding: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',}}}
       >
         <ChatBox groupId={groupId} />
       </Card>

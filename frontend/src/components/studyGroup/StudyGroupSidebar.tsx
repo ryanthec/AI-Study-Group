@@ -8,9 +8,11 @@ import {
   LogoutOutlined,
   DeleteOutlined,
   UserAddOutlined,
+  ArrowLeftOutlined,
   CrownOutlined,
 } from '@ant-design/icons';
 import type { StudyGroup } from '../../types/studyGroup.types';
+import { useTheme } from '../../hooks/useTheme';
 
 interface StudyGroupSidebarProps {
   groupId: number;
@@ -21,6 +23,7 @@ interface StudyGroupSidebarProps {
   onInvite?: () => void;
   onDelete?: () => void;
   onLeave?: () => void;
+  onBackToGroups?: () => void;
   onlineMembers?: number;
 }
 
@@ -32,8 +35,31 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
   onInvite,
   onDelete,
   onLeave,
+  onBackToGroups,
   onlineMembers = 0,
 }) => {
+  const { isDark } = useTheme();
+
+  const sidebarStyle: React.CSSProperties = {
+    background: isDark ? '#1f1f1f' : '#fff',
+    borderRight: isDark ? '1px solid #434343' : '1px solid #f0f0f0',
+    boxShadow: isDark
+      ? '1px 0 4px rgba(0, 0, 0, 0.45)'
+      : '1px 0 4px rgba(0, 0, 0, 0.05)',
+    height: 'calc(100vh - 64px)',
+    overflow: 'auto',
+    position: 'fixed',
+    left: 0,
+    top: 64,
+    width: 250,
+    zIndex: 100,
+  };
+
+  // Colors for borders and backgrounds
+  const borderColor = isDark ? '#434343' : '#f0f0f0';
+  const textSecondaryColor = isDark ? '#a6a6a6' : '#666';
+  const actionsBackground = isDark ? '#141414' : '#fafafa';
+
   if (!group) return null;
 
   const menuItems = [
@@ -58,20 +84,32 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
   ];
 
   return (
-    <Layout.Sider
-      width={250}
-      style={{
-        background: '#fff',
-        borderRight: '1px solid #f0f0f0',
-        height: 'calc(100vh - 64px)',
-        overflow: 'auto',
-        position: 'fixed',
-        left: 0,
-        top: 64,
-      }}
-    >
+    <Layout.Sider style={sidebarStyle}>
+
+      {/* Back to Groups Button */}
+      <div
+        style={{
+          padding: '12px 16px',
+          borderBottom: `1px solid ${borderColor}`,
+        }}
+      >
+        <Button
+          type="text"
+          icon={<ArrowLeftOutlined />}
+          onClick={onBackToGroups}
+          style={{ width: '100%', justifyContent: 'flex-start' }}
+        >
+          Back to Groups
+        </Button>
+      </div>
+
       {/* Group Title and Online Status */}
-      <div style={{ padding: '16px', borderBottom: '1px solid #f0f0f0' }}>
+      <div
+        style={{
+          padding: '16px',
+          borderBottom: `1px solid ${borderColor}`,
+        }}
+      >
         <h3 style={{ margin: '0 0 8px 0', wordBreak: 'break-word' }}>
           {group.name}
         </h3>
@@ -81,7 +119,13 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
           color="#52c41a"
           style={{ backgroundColor: '#52c41a' }}
         />
-        <span style={{ marginLeft: '8px', fontSize: '12px', color: '#666' }}>
+        <span
+          style={{
+            marginLeft: '8px',
+            fontSize: '12px',
+            color: textSecondaryColor,
+          }}
+        >
           {onlineMembers} online
         </span>
       </div>
@@ -91,18 +135,21 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
         mode="vertical"
         selectedKeys={[activeTab]}
         items={menuItems}
-        style={{ borderRight: 'none' }}
+        style={{
+          borderRight: 'none',
+          background: 'transparent',
+        }}
       />
 
       {/* Admin/User Actions */}
       <div
         style={{
           padding: '16px',
-          borderTop: '1px solid #f0f0f0',
+          borderTop: `1px solid ${borderColor}`,
           position: 'absolute',
           bottom: 0,
           width: '100%',
-          background: '#fafafa',
+          background: actionsBackground,
         }}
       >
         <Space direction="vertical" style={{ width: '100%' }} size={8}>
@@ -112,7 +159,6 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
                 <Button
                   block
                   type="primary"
-                  ghost
                   icon={<SettingOutlined />}
                   onClick={onEdit}
                 >
@@ -120,21 +166,12 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
                 </Button>
               </Tooltip>
               <Tooltip title="Invite members to group">
-                <Button
-                  block
-                  icon={<UserAddOutlined />}
-                  onClick={onInvite}
-                >
+                <Button block icon={<UserAddOutlined />} onClick={onInvite}>
                   Invite
                 </Button>
               </Tooltip>
               <Tooltip title="Delete this group permanently">
-                <Button
-                  block
-                  danger
-                  icon={<DeleteOutlined />}
-                  onClick={onDelete}
-                >
+                <Button block danger icon={<DeleteOutlined />} onClick={onDelete}>
                   Delete
                 </Button>
               </Tooltip>
@@ -142,12 +179,7 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
           )}
           {!group.is_admin && (
             <Tooltip title="Leave this study group">
-              <Button
-                block
-                danger
-                icon={<LogoutOutlined />}
-                onClick={onLeave}
-              >
+              <Button block danger icon={<LogoutOutlined />} onClick={onLeave}>
                 Leave
               </Button>
             </Tooltip>

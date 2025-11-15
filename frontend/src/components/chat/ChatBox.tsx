@@ -1,20 +1,29 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Input, Button, Avatar, Typography, Space, Tag, Spin } from 'antd';
-import { SendOutlined, UserOutlined, RobotOutlined, PaperClipOutlined, LoadingOutlined } from '@ant-design/icons';
+import { Input, Button, Avatar, Typography, Space, Tag, Spin, Tooltip } from 'antd';
+import {
+  SendOutlined,
+  UserOutlined,
+  RobotOutlined,
+  PaperClipOutlined,
+  LoadingOutlined,
+} from '@ant-design/icons';
 import { message } from 'antd';
-
 
 import { chatService } from '../../services/chat.service';
 import { useAuth } from '../../hooks/useAuth';
+import { useTheme } from '../../hooks/useTheme';
 import type { ChatMessage } from '../../types/message.types';
 import { studyGroupService } from '../../services/studyGroup.service';
 
 const { Text } = Typography;
 
-interface ChatBoxProps { groupId: number; }
+interface ChatBoxProps {
+  groupId: number;
+}
 
 export const ChatBox: React.FC<ChatBoxProps> = ({ groupId }) => {
   const { user } = useAuth();
+  const { isDark } = useTheme();
 
   // states for messages and connection
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -28,14 +37,13 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId }) => {
 
   // refs for WebSocket and connection state
   const wsRef = useRef<WebSocket | null>(null);
-  const readyRef = useRef(false); // single source of truth for OPEN
+  const readyRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const isOpen = () => readyRef.current;
 
-
-  const isOpen = () => readyRef.current;   // gate send on this
-
-  const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToBottom = () =>
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
 
   // useEffect to load message history and setup WebSocket
   useEffect(() => {
@@ -52,7 +60,6 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId }) => {
     };
     load();
 
-    // open a single socket per group
     if (!wsRef.current) {
       const ws = chatService.connectWebSocket(groupId);
       wsRef.current = ws;
@@ -67,7 +74,9 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId }) => {
         try {
           const msg: ChatMessage = JSON.parse(e.data);
           setMessages((prev) => [...prev, msg]);
-        } catch { /* ignore malformed frames */ }
+        } catch {
+          /* ignore malformed frames */
+        }
       };
 
       ws.onerror = () => {
@@ -85,17 +94,19 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId }) => {
     return () => {
       cancelled = true;
       if (wsRef.current) {
-        try { wsRef.current.close(); } catch {}
+        try {
+          wsRef.current.close();
+        } catch {}
         wsRef.current = null;
       }
       readyRef.current = false;
       setConnected(false);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupId]); // StrictMode will mount/unmount twice in dev
+  }, [groupId]);
 
-  useEffect(() => { scrollToBottom(); }, [messages]);
-
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
 
   // Handle sending messages
   const handleSend = () => {
@@ -103,15 +114,12 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId }) => {
     if (!text) return;
     const ws = wsRef.current;
     if (!ws || !isOpen()) {
-      // message.warning('Not connected yet, please wait');
       return;
     }
     try {
       chatService.sendMessage(ws, text);
       setInputValue('');
-    } catch {
-      // message.error('Failed to send message');
-    }
+    } catch {}
   };
 
   // Handle key down for input (send on Enter)
@@ -122,60 +130,151 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId }) => {
     }
   };
 
+  // Dynamic color definitions (Inspired by Discord Themes)
+  const colors = {
+    // Main backgrounds
+    messageBg: isDark ? '#313338' : '#ffffff',
+    chatBg: isDark ? '#313338' : '#f2f3f5',
+    inputBg: isDark ? '#383a40' : '#ffffff',
+    
+    // Message bubbles
+    ownBubble: isDark ? '#5865f2' : '#5865f2',
+    otherBubble: isDark ? '#2b2d31' : '#e3e5e8',
+    aiBubble: isDark ? '#2b2d31' : '#f2f3f5',
+    
+    // Text
+    ownText: '#ffffff',
+    otherText: isDark ? '#dbdee1' : '#313338',
+    secondaryText: isDark ? '#949ba4' : '#4e5058',
+    
+    // Borders
+    border: isDark ? '#1e1f22' : '#e3e5e8',
+    inputBorder: isDark ? '#1e1f22' : '#d0d1d4',
+    
+    // Status indicator
+    onlineGreen: '#23a559',
+    offlineRed: '#f23f43',
+  };
+
   // Render a single message
-  const renderMessage = (message: ChatMessage) => {
-    const isOwn = message.user?.id === user?.id;
-    const isSystem = message.message_type === 'system';
-    const isAI = message.message_type === 'ai_response';
+  const renderMessage = (msg: ChatMessage) => {
+    const isOwn = msg.user?.id === user?.id;
+    const isSystem = msg.message_type === 'system';
+    const isAI = msg.message_type === 'ai_response';
 
     if (isSystem) {
       return (
-        <div key={message.id} style={{ textAlign: 'center', margin: '12px 0' }}>
-          <Tag color="blue">{message.content}</Tag>
+        <div
+          key={msg.id}
+          style={{
+            textAlign: 'center',
+            margin: '8px 0',
+            padding: '4px 0',
+          }}
+        >
+          <Tag
+            color={isDark ? 'blue' : 'blue'}
+            style={{
+              borderRadius: '12px',
+              padding: '4px 12px',
+              fontSize: '12px',
+            }}
+          >
+            {msg.content}
+          </Tag>
         </div>
       );
     }
 
+    // ✅ Discord-style message layout
     return (
       <div
-        key={message.id}
+        key={msg.id}
         style={{
           display: 'flex',
-          flexDirection: isOwn ? 'row-reverse' : 'row',
-          marginBottom: 16,
-          gap: 8,
+          flexDirection: 'row',
+          padding: '4px 16px',
+          marginTop: '4px',
+          gap: 12,
         }}
+        onMouseEnter={(e) =>
+          (e.currentTarget.style.background = isDark ? '#2e3035' : '#f9f9f9')
+        }
+        onMouseLeave={(e) =>
+          (e.currentTarget.style.background = 'transparent')
+        }
       >
-        <Avatar
-          icon={isAI ? <RobotOutlined /> : <UserOutlined />}
-          src={message.user?.avatar}
-          style={{ flexShrink: 0 }}
-        />
-        <div style={{ maxWidth: '70%' }}>
-          {!isOwn && (
-            <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
-              {message.user?.username}
-            </Text>
-          )}
+        {/* Avatar */}
+        <div style={{ flexShrink: 0, marginTop: '4px' }}>
+          <Avatar
+            size={40}
+            icon={isAI ? <RobotOutlined /> : <UserOutlined />}
+            src={msg.user?.avatar}
+            style={{
+              backgroundColor: isAI
+                ? '#7289da'
+                : isOwn
+                ? colors.ownBubble
+                : '#99aab5',
+            }}
+          />
+        </div>
+
+        {/* Message content */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {/* Header: username + timestamp */}
           <div
             style={{
-              padding: '8px 12px',
-              borderRadius: 8,
-              background: isOwn ? '#1890ff' : isAI ? '#f0f0f0' : '#e6f7ff',
-              color: isOwn ? '#fff' : '#000',
-              wordBreak: 'break-word',
+              display: 'flex',
+              alignItems: 'baseline',
+              gap: 8,
+              marginBottom: 2,
             }}
           >
-            <Text style={{ color: isOwn ? '#fff' : '#000' }}>{message.content}</Text>
+            <Text
+              strong
+              style={{
+                fontSize: '15px',
+                color: isOwn
+                  ? colors.ownBubble
+                  : isAI
+                  ? '#7289da'
+                  : isDark
+                  ? '#f2f3f5'
+                  : '#313338',
+              }}
+            >
+              {isAI ? 'AI Assistant' : msg.user?.username || 'Unknown'}
+            </Text>
+            <Text
+              type="secondary"
+              style={{
+                fontSize: '11px',
+                color: colors.secondaryText,
+              }}
+            >
+              {new Date(msg.created_at).toLocaleTimeString([], {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </Text>
           </div>
-          <Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 4 }}>
-            {new Date(message.created_at).toLocaleTimeString()}
-          </Text>
+
+          {/* Message text */}
+          <div
+            style={{
+              fontSize: '15px',
+              lineHeight: '1.375rem',
+              color: colors.otherText,
+              wordWrap: 'break-word',
+            }}
+          >
+            {msg.content}
+          </div>
         </div>
       </div>
     );
   };
-
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -188,7 +287,9 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId }) => {
 
     const allowedExtensions = ['.pdf', '.txt', '.docx', '.doc', '.md'];
     const fileName = file.name.toLowerCase();
-    const hasValidExtension = allowedExtensions.some(ext => fileName.endsWith(ext));
+    const hasValidExtension = allowedExtensions.some((ext) =>
+      fileName.endsWith(ext)
+    );
 
     if (!hasValidExtension) {
       message.error(`Unsupported file format. Allowed: ${allowedExtensions.join(', ')}`);
@@ -210,81 +311,156 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId }) => {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* Status */}
-      <div style={{ padding: '8px 16px', borderBottom: '1px solid #f0f0f0' }}>
-        <Space>
-          <div
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: '50%',
-              background: connected ? '#52c41a' : '#ff4d4f',
-            }}
-          />
-          <Text type="secondary">{connected ? 'Connected' : 'Disconnected'}</Text>
-        </Space>
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        minHeight: '400px', // Minimum height when no messages
+        maxHeight: '100%', // Prevent growing beyond container
+        background: colors.chatBg,
+      }}
+    >
+      {/* Status bar */}
+      <div
+        style={{
+          padding: '12px 16px',
+          borderBottom: `1px solid ${colors.border}`,
+          background: colors.messageBg,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          flexShrink: 0,
+        }}
+      >
+        <div
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            background: connected ? colors.onlineGreen : colors.offlineRed,
+          }}
+        />
+        <Text style={{ fontSize: '14px', color: colors.secondaryText }}>
+          {connected ? 'Connected' : 'Disconnected'}
+        </Text>
       </div>
 
-      {/* Messages */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: 16, background: '#fafafa' }}>
+      {/* Messages area */}
+      <div
+        style={{
+          flex: 1,
+          overflowY: 'auto', // Only this section scrolls
+          overflowX: 'hidden',
+          background: colors.messageBg,
+          minHeight: 0,
+        }}
+      >
         {loading ? (
-          <div style={{ textAlign: 'center', padding: 40 }}>
-            <Spin />
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              minHeight: '300px',
+            }}
+          >
+            <Spin size="large" />
           </div>
         ) : messages.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: 40 }}>
-            <Text type="secondary">No messages yet. Start the conversation!</Text>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minHeight: '300px',
+              padding: 40,
+            }}
+          >
+            <Text
+              type="secondary"
+              style={{ fontSize: '16px', color: colors.secondaryText }}
+            >
+              No messages yet. Start the conversation!
+            </Text>
           </div>
         ) : (
           <>
-            {messages.map(renderMessage)}
+            <div style={{ paddingTop: 16, paddingBottom: 16 }}>
+              {messages.map(renderMessage)}
+            </div>
             <div ref={messagesEndRef} />
           </>
         )}
       </div>
 
-      {/* Input */}
-      <div style={{ padding: 16, borderTop: '1px solid #f0f0f0', background: '#fff' }}>
-        <Space.Compact style={{ width: '100%' }}>
+      {/* Input area - fixed at bottom */}
+      <div
+        style={{
+          padding: '16px',
+          background: colors.messageBg,
+          borderTop: `1px solid ${colors.border}`,
+          flexShrink: 0,
+        }}
+      >
+        <div
+          style={{
+            background: colors.inputBg,
+            borderRadius: '8px',
+            border: `1px solid ${colors.inputBorder}`,
+            padding: '0 16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            onChange={handleFileSelect}
+            style={{ display: 'none' }}
+            accept=".pdf,.txt,.docx,.doc,.md"
+          />
+          <Tooltip title="Attach document">
+            <Button
+              type="text"
+              icon={uploading ? <LoadingOutlined /> : <PaperClipOutlined />}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              style={{
+                color: colors.secondaryText,
+                padding: '4px 8px',
+              }}
+            />
+          </Tooltip>
+
           <Input
-            placeholder="Type a message..."
+            placeholder={`Type Message`}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={!connected}
-            size="large"
+            variant = "borderless"
+            style={{
+              background: 'transparent',
+              color: colors.otherText,
+              fontSize: '15px',
+              padding: '11px 0',
+            }}
           />
-          {/* Send button */}
+
           <Button
-            type="primary"
+            type="text"
             icon={<SendOutlined />}
             onClick={handleSend}
             disabled={!connected || !inputValue.trim()}
-            size="large"
-          >
-            Send
-          </Button>
-
-          {/* File upload */}
-          <div style={{ marginTop: '8px' }}>
-            <input
-              ref={fileInputRef}
-              type="file"
-              onChange={handleFileSelect}
-              style={{ display: 'none' }}
-              accept=".pdf,.txt,.docx,.doc,.md"
-            />
-            <Button
-              icon={uploading ? <LoadingOutlined /> : <PaperClipOutlined />}
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
-              loading={uploading}
-            >
-              Attach Document
-            </Button>
-          </div>
-        </Space.Compact>
+            style={{
+              color: inputValue.trim() ? colors.ownBubble : colors.secondaryText,
+              padding: '4px 8px',
+            }}
+          />
+        </div>
       </div>
     </div>
   );

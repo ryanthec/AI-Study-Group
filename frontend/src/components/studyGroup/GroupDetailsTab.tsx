@@ -2,6 +2,7 @@ import React from 'react';
 import { Card, Descriptions, Tag, Space, Avatar, List, Empty, Spin } from 'antd';
 import { CrownOutlined, UserOutlined } from '@ant-design/icons';
 import type { StudyGroup } from '../../types/studyGroup.types';
+import {useTheme} from "../../hooks/useTheme";
 
 interface GroupMember {
   id: string;
@@ -24,6 +25,17 @@ export const GroupDetailsTab: React.FC<GroupDetailsTabProps> = ({
   members,
   membersLoading,
 }) => {
+
+  const { isDark } = useTheme();
+
+  const cardStyle = {
+    boxShadow: isDark 
+      ? '0 2px 8px rgba(0, 0, 0, 0.45)' 
+      : '0 1px 4px rgba(0, 0, 0, 0.08)',
+    border: isDark ? '1px solid #434343' : '1px solid #f0f0f0',
+    borderRadius: '8px',
+  };
+
   if (loading || !group) {
     return <Spin />;
   }
@@ -31,7 +43,7 @@ export const GroupDetailsTab: React.FC<GroupDetailsTabProps> = ({
   return (
     <div style={{ padding: '24px' }}>
       {/* Group Information Card */}
-      <Card style={{ marginBottom: '24px' }}>
+      <Card style={cardStyle}>
         <Descriptions
           title={<h2>{group.name}</h2>}
           bordered
@@ -64,7 +76,7 @@ export const GroupDetailsTab: React.FC<GroupDetailsTabProps> = ({
       </Card>
 
       {/* Members List Card */}
-      <Card title="Group Members" loading={membersLoading}>
+      <Card title="Group Members" loading={membersLoading} style={{ ...cardStyle, marginTop: '24px' }}>
         {members && members.length > 0 ? (
           <List
             dataSource={members}
@@ -72,7 +84,7 @@ export const GroupDetailsTab: React.FC<GroupDetailsTabProps> = ({
               <List.Item
                 style={{
                   padding: '12px 0',
-                  borderBottom: '1px solid #f0f0f0',
+                  borderBottom: isDark ? '1px solid #434343' : '1px solid #f0f0f0',
                 }}
               >
                 <List.Item.Meta
@@ -81,7 +93,7 @@ export const GroupDetailsTab: React.FC<GroupDetailsTabProps> = ({
                       src={member.avatar}
                       icon={<UserOutlined />}
                       style={{
-                        backgroundColor: member.isOnline ? '#52c41a' : '#d9d9d9',
+                        backgroundColor: member.isOnline ? '#52c41a' : '#e62828ff',
                       }}
                     />
                   }
@@ -99,7 +111,7 @@ export const GroupDetailsTab: React.FC<GroupDetailsTabProps> = ({
                         </Tag>
                       )}
                       {!member.isOnline && (
-                        <Tag color="default" style={{ marginLeft: '8px' }}>
+                        <Tag color="red" style={{ marginLeft: '8px' }}>
                           Offline
                         </Tag>
                       )}

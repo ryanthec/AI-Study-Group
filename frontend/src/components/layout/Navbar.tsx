@@ -1,17 +1,10 @@
-// components/layout/Navbar.tsx
 import React from 'react';
-import { Layout, Menu, Avatar, Dropdown, Space, Typography } from 'antd';
-import {
-  HomeOutlined,
-  TeamOutlined,
-  SearchOutlined,
-  UserOutlined,
-  LogoutOutlined,
-  SettingOutlined,
-} from '@ant-design/icons';
+import { Layout, Menu, Avatar, Dropdown, Space, Typography, MenuProps } from 'antd';
+import { HomeOutlined, TeamOutlined, SearchOutlined, UserOutlined, LogoutOutlined, SettingOutlined,} from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import type { MenuProps } from 'antd';
+import { useTheme } from '../../hooks/useTheme';
+import { ThemeToggleButton } from './ThemeToggleButton';
 
 const { Header } = Layout;
 const { Text } = Typography;
@@ -20,6 +13,7 @@ export const Navbar: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
+  const { isDark } = useTheme();
 
   const menuItems: MenuProps['items'] = [
     { key: '/dashboard', icon: <HomeOutlined />, label: 'Dashboard' },
@@ -34,17 +28,21 @@ export const Navbar: React.FC = () => {
     { key: 'logout', icon: <LogoutOutlined />, label: 'Logout', onClick: logout },
   ];
 
+  // Darkmode styles
+  const headerStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    padding: '0 24px',
+    background: isDark ? '#1f1f1f' : '#fff',
+    borderBottom: isDark ? '1px solid #434343' : '1px solid #f0f0f0',
+    boxShadow: isDark 
+      ? '0 2px 8px rgba(0, 0, 0, 0.45)' 
+      : '0 1px 4px rgba(0, 0, 0, 0.08)',
+    gap: 16,
+  };
+
   return (
-    <Header
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        padding: '0 24px',
-        background: '#fff',
-        borderBottom: '1px solid #f0f0f0',
-        gap: 16,
-      }}
-    >
+    <Header style={headerStyle}>
       {/* Left: Brand */}
       <div
         style={{
@@ -83,10 +81,16 @@ export const Navbar: React.FC = () => {
             flex: '1 1 auto',
             minWidth: 0,
             border: 'none',
-            overflow: 'hidden',              // let items compress
+            overflow: 'hidden',
+            background: 'transparent',
           }}
         />
       </div>
+
+      <Space>
+        {/* Theme toggle */}
+        <ThemeToggleButton />
+      </Space>
 
       {/* Right: Profile gets priority width and can take space from tabs */}
       <Dropdown menu={{ items: userMenuItems }} placement="bottomRight" trigger={['click']}>

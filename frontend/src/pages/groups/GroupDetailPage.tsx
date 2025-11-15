@@ -1,21 +1,31 @@
+// React and libraries
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Layout, Button, message, Modal, Spin } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
+
+// Services and components
+import { Navbar } from '../../components/layout/Navbar';
 import { studyGroupService } from '../../services/studyGroup.service';
 import { StudyGroupSidebar } from '../../components/studyGroup/StudyGroupSidebar';
 import { GroupDetailsTab } from '../../components/studyGroup/GroupDetailsTab';
 import { ChatTab } from '../../components/studyGroup/ChatTab';
 import { DocumentsTab } from '../../components/studyGroup/DocumentsTab';
 import { InviteMemberModal } from '../../components/email/InviteMemberModal';
+
+// Types and hooks
 import type { StudyGroup } from '../../types/studyGroup.types';
 import { useAuth } from '../../hooks/useAuth';
+import { useTheme } from '../../hooks/useTheme';
 
 export const GroupDetailPage: React.FC = () => {
-  const { groupId } = useParams<{ groupId: string }>();
+  
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isDark } = useTheme();
 
+  // Group and Member related states
+  const { groupId } = useParams<{ groupId: string }>();
   const [group, setGroup] = useState<StudyGroup | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'details' | 'chat' | 'documents'>('details');
@@ -31,14 +41,14 @@ export const GroupDetailPage: React.FC = () => {
     }
   }, [groupId]);
 
-  // Poll member status every 10 seconds to update online count
+  // Poll member status every 2 seconds to update online count
   useEffect(() => {
     if (!groupId) return;
 
     const interval = setInterval(() => {
       // Silently refresh member list to update online status
       loadMembersQuietly();
-    }, 10000); // Poll every 10 seconds
+    }, 2000); // Poll every 2 seconds
 
     return () => clearInterval(interval);
   }, [groupId]);
@@ -125,6 +135,10 @@ export const GroupDetailPage: React.FC = () => {
     navigate(`/groups/${groupId}/edit`);
   };
 
+  const handleBackToGroups = () => {
+    navigate('/groups');
+  }
+
   const renderContent = () => {
     switch (activeTab) {
       case 'chat':
@@ -150,36 +164,10 @@ export const GroupDetailPage: React.FC = () => {
     }
   };
 
+
   return (
-    <Layout style={{ minHeight: '100vh', marginTop: '64px' }}>
-      {/* Header */}
-      <Layout.Header
-        style={{
-          background: '#fff',
-          borderBottom: '1px solid #f0f0f0',
-          padding: '0 24px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '16px',
-          height: '64px',
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 100,
-        }}
-      >
-        <Button
-          type="text"
-          icon={<ArrowLeftOutlined />}
-          onClick={() => navigate('/groups')}
-        >
-          Back to Groups
-        </Button>
-        <h2 style={{ margin: 0, flex: 1 }}>
-          {loading ? 'Loading...' : group?.name}
-        </h2>
-      </Layout.Header>
+    <>
+      <Navbar />
 
       {/* Sidebar Navigation */}
       {!loading && group && (
@@ -192,22 +180,36 @@ export const GroupDetailPage: React.FC = () => {
           onInvite={() => setInviteModalVisible(true)}
           onDelete={handleDelete}
           onLeave={handleLeave}
+          onBackToGroups={handleBackToGroups}
           onlineMembers={onlineMembers}
         />
       )}
 
-      {/* Main Content */}
-      <Layout.Content
+      {/* Main Content - with proper margin for sidebar AND navbar */}
+      <div
         style={{
-          marginLeft: 250,
-          marginTop: '64px',
-          background: '#f5f5f5',
-          minHeight: 'calc(100vh - 128px)',
-          overflowY: 'auto',
+          marginLeft: 200,
+          marginTop: 0,
+          minHeight: 'calc(100vh - 64px)',
+          background: isDark ? '#141414' : '#f5f5f5',
+          padding: 0,
         }}
       >
-        {loading ? <Spin /> : renderContent()}
-      </Layout.Content>
+        {loading ? (
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              minHeight: '400px',
+            }}
+          >
+            <Spin size="large" />
+          </div>
+        ) : (
+          renderContent()
+        )}
+      </div>
 
       {/* Invite Modal */}
       {group && (
@@ -221,6 +223,6 @@ export const GroupDetailPage: React.FC = () => {
           }}
         />
       )}
-    </Layout>
+    </>
   );
 };

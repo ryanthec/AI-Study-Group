@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Row, Col, Statistic, Button, List, Tag, Typography, Space } from 'antd';
+import { Card, Row, Col, Statistic, Button, List, Tag, Typography, Space, Layout } from 'antd';
 import {
   TeamOutlined,
   BookOutlined,
@@ -8,6 +8,7 @@ import {
   ArrowRightOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from '../../hooks/useTheme';
 import { studyGroupService } from '../../services/studyGroup.service';
 import type { StudyGroup, StudyGroupStats } from '../../types/studyGroup.types';
 
@@ -15,6 +16,7 @@ const { Title, Text } = Typography;
 
 export const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
+  const { isDark } = useTheme();
   const [stats, setStats] = useState<StudyGroupStats>({
     total_groups: 0,
     groups_created: 0,
@@ -43,26 +45,46 @@ export const DashboardPage: React.FC = () => {
     }
   };
 
+
+  // Define shadows (for visual contrast between components) and color based on theme
+  const cardStyle = {
+    boxShadow: isDark 
+      ? '0 2px 8px rgba(0, 0, 0, 0.45)' 
+      : '0 1px 4px rgba(0, 0, 0, 0.08)',
+    border: isDark ? '1px solid #434343' : '1px solid #f0f0f0',
+    borderRadius: '8px',
+  };
+
+  const bgColor = isDark ? '#1f1f1f' : '#f9f9f9';
+
   return (
-    <div style={{ padding: '24px' }}>
-      <Space direction="vertical" size="large" style={{ width: '100%' }}>
+    <Layout style={{ minHeight: '100vh', background: bgColor }}>
+      <Layout.Content style={{ padding: '24px', background: bgColor,}}>
         {/* Header */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Title level={2}>Dashboard</Title>
+        <div style={{ marginBottom: '32px' }}>
+          <Title level={2} style={{ margin: 0 }}>
+            Dashboard
+          </Title>
+          <Text type="secondary">Welcome back! Here's your study group overview.</Text>
+        </div>
+
+        {/* Create Group Button */}
+        <div style={{ marginBottom: '24px' }}>
           <Button
             type="primary"
-            icon={<PlusOutlined />}
             size="large"
+            icon={<PlusOutlined />}
             onClick={() => navigate('/groups/create')}
+            style={{ borderRadius: '6px' }}
           >
             Create Study Group
           </Button>
         </div>
 
         {/* Stats Cards */}
-        <Row gutter={16}>
+        <Row gutter={[16, 16]} style={{ marginBottom: '32px' }}>
           <Col xs={24} sm={8}>
-            <Card loading={loading}>
+            <Card style={cardStyle} loading={loading}>
               <Statistic
                 title="Total Groups"
                 value={stats.total_groups}
@@ -72,21 +94,21 @@ export const DashboardPage: React.FC = () => {
             </Card>
           </Col>
           <Col xs={24} sm={8}>
-            <Card loading={loading}>
+            <Card style={cardStyle} loading={loading}>
               <Statistic
                 title="Groups Created"
                 value={stats.groups_created}
-                prefix={<BookOutlined/>}
+                prefix={<BookOutlined />}
                 valueStyle={{ color: '#52c41a' }}
               />
             </Card>
           </Col>
           <Col xs={24} sm={8}>
-            <Card loading={loading}>
+            <Card style={cardStyle} loading={loading}>
               <Statistic
-                title="Study Sessions Completed"
+                title="Sessions Completed"
                 value={stats.sessions_completed}
-                prefix={<TrophyOutlined/>}
+                prefix={<TrophyOutlined />}
                 valueStyle={{ color: '#faad14' }}
               />
             </Card>
@@ -95,29 +117,30 @@ export const DashboardPage: React.FC = () => {
 
         {/* Recent Groups */}
         <Card
-          title="Recent Study Groups"
-          loading={loading}
+          title="Your Recent Study Groups"
           extra={
             <Button
               type="link"
-              icon={<ArrowRightOutlined />}
               onClick={() => navigate('/groups')}
+              icon={<ArrowRightOutlined />}
             >
               View All
             </Button>
           }
+          style={cardStyle}
+          loading={loading}
         >
           {recentGroups.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px 0' }}>
+            <div style={{ textAlign: 'center', padding: '40px 20px' }}>
               <Text type="secondary">No study groups yet</Text>
-              <br />
-              <Button
-                type="primary"
-                style={{ marginTop: 16 }}
-                onClick={() => navigate('/groups/browse')}
-              >
-                Browse Groups
-              </Button>
+              <div style={{ marginTop: '16px' }}>
+                <Button
+                  type="primary"
+                  onClick={() => navigate('/groups/browse')}
+                >
+                  Browse Groups
+                </Button>
+              </div>
             </div>
           ) : (
             <List
@@ -135,20 +158,18 @@ export const DashboardPage: React.FC = () => {
                   ]}
                 >
                   <List.Item.Meta
-                    title={
-                      <Space>
-                        {group.name}
-                        {group.is_admin && <Tag color="blue">Admin</Tag>}
-                      </Space>
-                    }
+                    title={group.name}
                     description={
-                      <Space direction="vertical" size={4}>
-                        <Text type="secondary">{group.description || 'No description'}</Text>
-                        <Space size={8}>
+                      <Space direction="vertical" size={0}>
+                        <Text type="secondary">
+                          {group.description || 'No description'}
+                        </Text>
+                        <Space size="small">
                           {group.subject && <Tag>{group.subject}</Tag>}
-                          <Text type="secondary">
+                          <Text type="secondary" style={{ fontSize: '12px' }}>
                             {group.member_count}/{group.max_members} members
                           </Text>
+                          {group.is_admin && <Tag color="blue">Admin</Tag>}
                         </Space>
                       </Space>
                     }
@@ -158,7 +179,7 @@ export const DashboardPage: React.FC = () => {
             />
           )}
         </Card>
-      </Space>
-    </div>
+      </Layout.Content>
+    </Layout>
   );
 };

@@ -7,6 +7,8 @@ import { Toaster } from 'react-hot-toast';
 import { AuthProvider } from './store/AuthContext';
 import { useAuth } from './hooks/useAuth';
 import './styles/globals.css';
+import './styles/theme.css';
+import { ThemeProvider } from './hooks/useTheme';
 
 // Components
 import { Layout } from './components/layout/Layout';
@@ -35,18 +37,6 @@ const queryClient = new QueryClient({
     },
   },
 });
-
-// Ant Design theme configuration
-const theme = {
-  token: {
-    colorPrimary: '#1890ff',
-    colorSuccess: '#52c41a',
-    colorWarning: '#faad14',
-    colorError: '#ff4d4f',
-    borderRadius: 6,
-    fontSize: 14,
-  },
-};
 
 // Protected Route Component
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -146,9 +136,7 @@ const AppContent: React.FC = () => {
           path="/groups/:groupId"
           element={
             <ProtectedRoute>
-              <Layout>
-                <GroupDetailPage />
-              </Layout>
+              <GroupDetailPage />
             </ProtectedRoute>
           }
         />
@@ -177,8 +165,8 @@ const AppContent: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <QueryClientProvider client={queryClient}>
-      <ConfigProvider theme={theme}>
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
         <AntApp>
           <AuthProvider>
             <AppContent />
@@ -194,8 +182,8 @@ const App: React.FC = () => {
             />
           </AuthProvider>
         </AntApp>
-      </ConfigProvider>
-    </QueryClientProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   );
 };
 
