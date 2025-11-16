@@ -1,5 +1,5 @@
 import os
-from typing import Optional, List, Dict, Any, Iterator
+from typing import Optional, List, Dict, Any, Iterator, AsyncIterator
 from abc import ABC, abstractmethod
 from datetime import datetime
 from dataclasses import dataclass, field
@@ -204,7 +204,7 @@ class BaseLLMModel:
             ]
         return contents
     
-    def generate_response(
+    async def generate_response(
         self,
         session_id: str,
         user_message: str,
@@ -254,6 +254,7 @@ class BaseLLMModel:
                 "temperature": temperature if temperature is not None else self.default_temperature,
                 "top_p": top_p if top_p is not None else self.top_p,
                 "top_k": top_k if top_k is not None else self.top_k,
+                "thinking_config": types.ThinkingConfig(thinking_budget=0),
             }
             
             if max_output_tokens is not None:
@@ -266,11 +267,11 @@ class BaseLLMModel:
             
             generation_config = types.GenerateContentConfig(**config_params)
             
-            # Generate response using the new SDK
-            response = self.client.models.generate_content(
+            # Generate response with await (for async support)
+            response = await self.client.models.generate_content(
                 model=self.model_name,
                 contents=contents,
-                config=generation_config
+                config=generation_config, 
             )
             
             # Extract response text
@@ -287,7 +288,7 @@ class BaseLLMModel:
             logger.error(f"Error generating response: {str(e)}")
             raise RuntimeError(f"Failed to generate response: {str(e)}")
     
-    def generate_response_with_context(
+    async def generate_response_with_context(
         self,
         session_id: str,
         user_message: str,
@@ -316,7 +317,7 @@ class BaseLLMModel:
         # Prepend context to user message
         message_with_context = f"{context}\n\nUser Question: {user_message}"
         
-        return self.generate_response(
+        return await self.generate_response(
             session_id=session_id,
             user_message=message_with_context,
             system_prompt=system_prompt,
@@ -328,7 +329,7 @@ class BaseLLMModel:
             use_chat_history=True
         )
     
-    def generate_response_stream(
+    async def generate_response_stream(
         self,
         session_id: str,
         user_message: str,
@@ -338,7 +339,7 @@ class BaseLLMModel:
         top_k: Optional[float] = None,
         max_output_tokens: Optional[int] = 2048,
         use_chat_history: bool = True
-    ) -> Iterator[str]:
+    ) -> AsyncIterator[str]:
         """
         Stream a response as text deltas; at stream end, save the full assistant reply in chat history.
         """
@@ -361,6 +362,7 @@ class BaseLLMModel:
             "temperature": temperature if temperature is not None else self.default_temperature,
             "top_p": top_p if top_p is not None else self.top_p,
             "top_k": top_k if top_k is not None else self.top_k,
+            "thinking_config": types.ThinkingConfig(thinking_budget=0),
         }
         if max_output_tokens is not None:
             config_params["max_output_tokens"] = max_output_tokens
@@ -374,18 +376,18 @@ class BaseLLMModel:
         # Stream from the model
         accumulated = []
         try:
-            stream = self.client.models.generate_content_stream(
+            stream = await self.client.aio.models.generate_content_stream(
                 model=self.model_name,
                 contents=contents,
                 config=generation_config,
             )
 
-            for chunk in stream:
+            async for chunk in stream:
                 delta = getattr(chunk, "text", None)
                 if not delta:
                     continue
                 accumulated.append(delta)
-                yield delta  # incremental text to caller/UI
+                yield delta
 
             # Save final assistant message into history after stream completes
             final_text = "".join(accumulated)
@@ -396,7 +398,7 @@ class BaseLLMModel:
             logger.error(f"Error during streaming: {str(e)}")
             raise RuntimeError(f"Failed to stream response: {str(e)}")
 
-    def generate_response_with_context_stream(
+    async def generate_response_with_context_stream(
         self,
         session_id: str,
         user_message: str,
@@ -407,12 +409,12 @@ class BaseLLMModel:
         top_k: Optional[float] = None,
         max_output_tokens: Optional[int] = 2048,
         use_chat_history: bool = True
-    ) -> Iterator[str]:
+    ) -> AsyncIterator[str]:
         """
         Stream a response with additional prefixed context; saves final answer to history on completion.
         """
         message_with_context = f"{context}\n\nUser Question: {user_message}"
-        yield from self.generate_response_stream(
+        async for chunk in self.generate_response_stream(
             session_id=session_id,
             user_message=message_with_context,
             system_prompt=system_prompt,
@@ -421,7 +423,8 @@ class BaseLLMModel:
             top_k=top_k,
             max_output_tokens=max_output_tokens,
             use_chat_history=use_chat_history,
-        )
+        ):
+            yield chunk
 
     def get_session_history(self, session_id: str) -> Optional[List[Dict[str, str]]]:
         """Get the chat history for a session."""

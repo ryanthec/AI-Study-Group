@@ -4,12 +4,12 @@ Uses Socratic prompting to enhance learning and critical thinking.
 Integrates with RAG system for document and conversation context.
 """
 
-from typing import Optional, Dict, Any, List, Iterator
+from typing import Optional, Dict, Any, List, Iterator, AsyncIterator
 from enum import Enum
 from dataclasses import dataclass
 import logging
 
-from base_llm_model import BaseLLMModel
+from .base_llm_model import BaseLLMModel
 from ..services.rag_service import RAGConfig, RAGService
 
 # Configure logging
@@ -121,7 +121,7 @@ class TeachingAssistantAgent:
         
         Args:
             base_llm: BaseLLMModel instance for LLM operations
-            rag_service: Optional RAG service instance (from your rag_service.py)
+            rag_service: Optional RAG service instance
             config: Optional TAConfig for customization
         """
         self.base_llm = base_llm
@@ -136,7 +136,7 @@ class TeachingAssistantAgent:
     # Core Functionality
     # ========================
     
-    def answer_question(
+    async def answer_question(
         self,
         session_id: str,
         group_id: int,
@@ -192,7 +192,8 @@ class TeachingAssistantAgent:
         temperature = custom_temperature or self.config.temperature
         top_p = custom_top_p or self.config.top_p
         top_k = custom_top_k or self.config.top_k
-        response = self.base_llm.generate_response(
+
+        response = await self.base_llm.generate_response(
             session_id=session_id,
             user_message=user_message,
             system_prompt=system_prompt,
@@ -206,7 +207,7 @@ class TeachingAssistantAgent:
         return response
     
     
-    def answer_question_stream(
+    async def answer_question_stream(
         self,
         session_id: str,
         group_id: int,
@@ -216,7 +217,7 @@ class TeachingAssistantAgent:
         custom_temperature: Optional[float] = None,
         custom_top_p: Optional[float] = None,
         custom_top_k: Optional[float] = None,
-    ) -> Iterator[str]:
+    ) -> AsyncIterator[str]:
         """
         Answer a student's question using Socratic prompting and optional RAG (streaming).
         
@@ -267,7 +268,7 @@ class TeachingAssistantAgent:
         top_p = custom_top_p or self.config.top_p
         top_k = custom_top_k or self.config.top_k
 
-        yield from self.base_llm.generate_response_stream(
+        async for chunk in self.base_llm.generate_response_stream(
             session_id=session_id,
             user_message=user_message,
             system_prompt=system_prompt,
@@ -276,7 +277,8 @@ class TeachingAssistantAgent:
             top_k=top_k,
             max_output_tokens=self.config.max_output_tokens,
             use_chat_history=True
-        )
+        ):
+            yield chunk
         
 
     def _prepare_message_with_rag(

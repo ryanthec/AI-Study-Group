@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Input, Button, Avatar, Typography, Space, Tag, Spin, Tooltip } from 'antd';
+import { Input, Button, Avatar, Typography, Space, Tag, Spin, Tooltip, AutoComplete } from 'antd';
 import {
   SendOutlined,
   UserOutlined,
@@ -22,15 +22,30 @@ interface ChatBoxProps {
   onUserCountUpdate?: (count: number) => void;
 }
 
+interface StreamingMessage {
+  id: string;
+  username: string;
+  content: string;
+  isStreaming: boolean;
+}
+
 export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) => {
   const { user } = useAuth();
   const { isDark } = useTheme();
 
-  // states for messages and connection
+  // Messages and connection states
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
+
+  // Streaming message state
+  const [streamingMessage, setStreamingMessage] = useState<StreamingMessage | null>(null);
+
+  // Autocomplete states
+  const [showAutocomplete, setShowAutocomplete] = useState(false);
+  const [autocompleteOptions, setAutocompleteOptions] = useState<{ value: string }[]>([]);
+  const [cursorPosition, setCursorPosition] = useState(0);
 
   // useStates & refs for document file upload
   const [uploading, setUploading] = useState(false);
@@ -40,6 +55,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) 
   const wsRef = useRef<WebSocket | null>(null);
   const readyRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<any>(null);
 
   const isOpen = () => readyRef.current;
 
@@ -81,12 +97,54 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) 
           onUserCountUpdate?.(data.count);
           return;
         }
+
+        // Handle AI typing indicator
+        if (data.type === 'ai_typing') {
+          setStreamingMessage({
+            id: `streaming_${Date.now()}`,
+            username: 'TeachingAI',
+            content: '',
+            isStreaming: true,
+          });
+          return;
+        }
         
+        // Handle AI streaming chunks
+        if (data.type === 'ai_stream') {
+          setStreamingMessage((prev) => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              content: prev.content + data.content, // Append chunk to existing content
+            };
+          });
+          // Auto-scroll to bottom as text streams
+          setTimeout(() => scrollToBottom(), 0);
+          return;
+        }
+
+        // Handle AI stream complete - finalize message
+        if (data.type === 'ai_complete') {
+          const aiMsg: ChatMessage = data.message;
+          // Add to regular messages
+          setMessages((prev) => [...prev, aiMsg]);
+          // Clear streaming state
+          setStreamingMessage(null);
+          return;
+        }
+
+        // Handle AI error
+        if (data.type === 'ai_error') {
+          setStreamingMessage(null);
+          message.error(data.content);
+          return;
+        }
+
         // Handle regular chat messages
         const msg: ChatMessage = data;
         setMessages((prev) => [...prev, msg]);
       } catch {
-        /* ignore malformed frames */
+        // ignore malformed frames
       }
     };
 
@@ -118,6 +176,53 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+
+  // Handle input change with @ detection
+  const handleInputChange = (value: string) => {
+    setInputValue(value);
+
+    // Get cursor position
+    const input = inputRef.current?.input;
+    if (input) {
+      const pos = input.selectionStart || 0;
+      setCursorPosition(pos);
+
+      // Check if user typed @ and show autocomplete
+      const textBeforeCursor = value.substring(0, pos);
+      const lastWord = textBeforeCursor.split(/\s/).pop() || '';
+
+      if (lastWord.startsWith('@') && lastWord.length === 1) {
+        // Show autocomplete when user types @
+        setAutocompleteOptions([{ value: '@TeachingAI' }]);
+        setShowAutocomplete(true);
+      } else if (!lastWord.startsWith('@')) {
+        setShowAutocomplete(false);
+      }
+    }
+  };
+
+  // Handle autocomplete selection
+  const handleAutocompleteSelect = (value: string) => {
+    const input = inputRef.current?.input;
+    if (!input) return;
+
+    const pos = cursorPosition;
+    const textBefore = inputValue.substring(0, pos);
+    const textAfter = inputValue.substring(pos);
+
+    // Replace the @ with @TeachingAI
+    const words = textBefore.split(/\s/);
+    words[words.length - 1] = value;
+    const newTextBefore = words.join(' ');
+
+    setInputValue(newTextBefore + ' ' + textAfter);
+    setShowAutocomplete(false);
+
+    // Focus back on input
+    setTimeout(() => input.focus(), 0);
+  };
+
 
   // Handle sending messages
   const handleSend = () => {
@@ -167,7 +272,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) 
     offlineRed: '#f23f43',
   };
 
-  // Render a single message
+  // Render a single normal message
   const renderMessage = (msg: ChatMessage) => {
     const isOwn = msg.user?.id === user?.id;
     const isSystem = msg.message_type === 'system';
@@ -287,6 +392,79 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) 
     );
   };
 
+  // Render streaming message (bubble expands as text arrives)
+  const renderStreamingMessage = (msg: StreamingMessage) => {
+    return (
+      <div
+        key={msg.id}
+        style={{
+          display: 'flex',
+          flexDirection: 'row',
+          padding: '8px 16px',
+          marginTop: '4px',
+          gap: 12,
+          background: isDark ? 'rgba(46, 48, 53, 0.5)' : 'rgba(249, 249, 249, 0.5)',
+          borderRadius: '4px',
+        }}
+      >
+        <div style={{ flexShrink: 0, marginTop: '4px' }}>
+          <Avatar
+            size={40}
+            icon={<RobotOutlined />}
+            style={{ backgroundColor: '#7289da' }}
+          />
+        </div>
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'baseline',
+              gap: 8,
+              marginBottom: 2,
+            }}
+          >
+            <Text strong style={{ fontSize: '15px', color: '#7289da' }}>
+              TeachingAI
+            </Text>
+            <Tag color="purple" style={{ fontSize: '10px', padding: '0 4px' }}>
+              BOT
+            </Tag>
+            <LoadingOutlined style={{ color: colors.secondaryText, fontSize: '12px' }} />
+          </div>
+
+          {/* This div expands naturally as text is added */}
+          <div
+            style={{
+              fontSize: '15px',
+              lineHeight: '1.375rem',
+              color: colors.otherText,
+              wordWrap: 'break-word',
+              whiteSpace: 'pre-wrap',
+              minHeight: '20px', // Minimum height so bubble doesn't collapse
+            }}
+          >
+            {msg.content}
+            {/* Blinking cursor */}
+            {msg.isStreaming && (
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: '2px',
+                  height: '1em',
+                  backgroundColor: colors.otherText,
+                  marginLeft: '2px',
+                  animation: 'blink 1s infinite',
+                }}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -355,6 +533,25 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) 
         <Text style={{ fontSize: '14px', color: colors.secondaryText }}>
           {connected ? 'Connected' : 'Disconnected'}
         </Text>
+
+        {streamingMessage && (
+          <>
+            <div
+              style={{
+                width: 4,
+                height: 4,
+                borderRadius: '50%',
+                background: colors.secondaryText,
+                margin: '0 4px',
+                animation: 'pulse 1.5s infinite',
+              }}
+            />
+            <Text style={{ fontSize: '12px', color: colors.secondaryText, fontStyle: 'italic' }}>
+              <RobotOutlined /> TeachingAI is typing...
+            </Text>
+          </>
+        )}
+
       </div>
 
       {/* Messages area */}
@@ -378,7 +575,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) 
           >
             <Spin size="large" />
           </div>
-        ) : messages.length === 0 ? (
+        ) : messages.length === 0 && !streamingMessage ? (
           <div
             style={{
               display: 'flex',
@@ -395,11 +592,20 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) 
             >
               No messages yet. Start the conversation!
             </Text>
+            <Text
+              type="secondary"
+              style={{ fontSize: '14px', color: colors.secondaryText, marginTop: 8 }}
+            >
+              Type <Tag>@TeachingAI</Tag> to ask the AI assistant
+            </Text>
+
           </div>
         ) : (
           <>
             <div style={{ paddingTop: 16, paddingBottom: 16 }}>
               {messages.map(renderMessage)}
+              {/* Render streaming message that expands */}
+              {streamingMessage && renderStreamingMessage(streamingMessage)}
             </div>
             <div ref={messagesEndRef} />
           </>
@@ -413,8 +619,60 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) 
           background: colors.messageBg,
           borderTop: `1px solid ${colors.border}`,
           flexShrink: 0,
+          position: 'relative', // For positioning autocomplete
         }}
       >
+        {/* Autocomplete dropdown (positioned absolutely) */}
+        {showAutocomplete && (
+          <div
+            style={{
+              position: 'absolute',
+              bottom: '100%',
+              left: '16px',
+              right: '16px',
+              background: colors.inputBg,
+              border: `1px solid ${colors.inputBorder}`,
+              borderRadius: '8px 8px 0 0',
+              marginBottom: '-1px',
+              boxShadow: isDark
+                ? '0 -2px 8px rgba(0, 0, 0, 0.45)'
+                : '0 -2px 8px rgba(0, 0, 0, 0.15)',
+              zIndex: 1000,
+              maxHeight: '200px',
+              overflowY: 'auto',
+            }}
+          >
+            {autocompleteOptions.map((option) => (
+              <div
+                key={option.value}
+                onClick={() => handleAutocompleteSelect(option.value)}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.background = isDark ? '#2e3035' : '#f9f9f9')
+                }
+                onMouseLeave={(e) =>
+                  (e.currentTarget.style.background = 'transparent')
+                }
+                style={{
+                  padding: '12px 16px',
+                  cursor: 'pointer',
+                  color: colors.otherText,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  transition: 'background 0.2s',
+                }}
+              >
+                <RobotOutlined style={{ color: '#7289da', fontSize: '16px' }} />
+                <Text style={{ color: colors.otherText, fontWeight: 500 }}>TeachingAI</Text>
+                <Tag color="purple" style={{ fontSize: '10px', padding: '0 4px', marginLeft: 'auto' }}>
+                  BOT
+                </Tag>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Input container */}
         <div
           style={{
             background: colors.inputBg,
@@ -445,22 +703,25 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) 
               }}
             />
           </Tooltip>
-
+          
+          {/* Simple Input without AutoComplete wrapper */}
           <Input
-            placeholder={`Type Message`}
+            ref={inputRef}
             value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
+            onChange={(e) => handleInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={!connected}
-            variant = "borderless"
+            placeholder={`Message #${groupId} (Type @ to mention TeachingAI)`}
+            variant="borderless"
             style={{
+              flex: 1,
               background: 'transparent',
               color: colors.otherText,
               fontSize: '15px',
               padding: '11px 0',
             }}
           />
-
+        
           <Button
             type="text"
             icon={<SendOutlined />}
@@ -473,6 +734,19 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) 
           />
         </div>
       </div>
+
+      {/* CSS animations for streaming effects */}
+      <style>{`
+        @keyframes blink {
+          0%, 50% { opacity: 1; }
+          51%, 100% { opacity: 0; }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+      `}</style>
+
     </div>
   );
 };
