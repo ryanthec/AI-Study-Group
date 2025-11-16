@@ -19,9 +19,10 @@ const { Text } = Typography;
 
 interface ChatBoxProps {
   groupId: number;
+  onUserCountUpdate?: (count: number) => void;
 }
 
-export const ChatBox: React.FC<ChatBoxProps> = ({ groupId }) => {
+export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) => {
   const { user } = useAuth();
   const { isDark } = useTheme();
 
@@ -70,14 +71,24 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId }) => {
         setConnected(true);
       };
 
-      ws.onmessage = (e) => {
-        try {
-          const msg: ChatMessage = JSON.parse(e.data);
-          setMessages((prev) => [...prev, msg]);
-        } catch {
-          /* ignore malformed frames */
+    ws.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        
+        // Handle user count updates
+        if (data.type === 'user_count_update') {
+          // Pass the count up to parent component via a callback prop
+          onUserCountUpdate?.(data.count);
+          return;
         }
-      };
+        
+        // Handle regular chat messages
+        const msg: ChatMessage = data;
+        setMessages((prev) => [...prev, msg]);
+      } catch {
+        /* ignore malformed frames */
+      }
+    };
 
       ws.onerror = () => {
         readyRef.current = false;
@@ -145,11 +156,11 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId }) => {
     // Text
     ownText: '#ffffff',
     otherText: isDark ? '#dbdee1' : '#313338',
-    secondaryText: isDark ? '#949ba4' : '#4e5058',
+    secondaryText: isDark ? '#949ba4' : '#3e3e41ff',
     
     // Borders
     border: isDark ? '#1e1f22' : '#e3e5e8',
-    inputBorder: isDark ? '#1e1f22' : '#d0d1d4',
+    inputBorder: isDark ? '#1e1f22' : '#59595aff',
     
     // Status indicator
     onlineGreen: '#23a559',

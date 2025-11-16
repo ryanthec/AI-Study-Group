@@ -80,6 +80,9 @@ async def websocket_endpoint(websocket: WebSocket, group_id: int, db: Session = 
         )
         StudyGroupService.mark_user_offline(group_id, user.id)
         await manager.broadcast_to_group(MessageService.format_message_for_ws(leave, db), group_id)
+        
+        # Broadcast updated user count after user leaves
+        await manager.broadcast_user_count(group_id)
 
 
 @router.get("/{group_id}/messages")

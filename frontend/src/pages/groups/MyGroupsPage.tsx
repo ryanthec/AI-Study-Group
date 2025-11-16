@@ -8,6 +8,7 @@ import {
   CrownOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from '../../hooks/useTheme';
 import { studyGroupService } from '../../services/studyGroup.service';
 import type { StudyGroup } from '../../types/studyGroup.types';
 
@@ -15,6 +16,7 @@ const { Title, Text } = Typography;
 
 export const MyGroupsPage: React.FC = () => {
   const navigate = useNavigate();
+  const { isDark } = useTheme();
   const [groups, setGroups] = useState<StudyGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
@@ -36,6 +38,15 @@ export const MyGroupsPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const cardStyle = {
+    boxShadow: isDark
+      ? '0 2px 8px rgba(0, 0, 0, 0.45)'
+      : '0 2px 8px rgba(0, 0, 0, 0.2)',
+    border: isDark ? '1px solid #434343' : '1px solid #9fa1a3ff',
+    borderRadius: '8px',
+    marginBottom: '24px',
   };
 
   return (
@@ -60,7 +71,7 @@ export const MyGroupsPage: React.FC = () => {
           </Space>
         </div>
 
-        <Card>
+        <Card style={cardStyle}>
           {groups.length === 0 && !loading ? (
             <Empty
               description="You haven't joined any study groups yet"
@@ -78,6 +89,12 @@ export const MyGroupsPage: React.FC = () => {
                 renderItem={(group) => (
                   <List.Item
                     key={group.id}
+                    style={{
+                      borderBottom: isDark
+                        ? '1px solid #434343'
+                        : '1px solid #767677ff',
+                      padding: '16px 0',
+                    }}
                     actions={[
                       group.is_admin && (
                         <Button

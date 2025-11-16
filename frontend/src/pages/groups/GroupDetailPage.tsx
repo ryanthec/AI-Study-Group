@@ -41,17 +41,6 @@ export const GroupDetailPage: React.FC = () => {
     }
   }, [groupId]);
 
-  // Poll member status every 2 seconds to update online count
-  useEffect(() => {
-    if (!groupId) return;
-
-    const interval = setInterval(() => {
-      // Silently refresh member list to update online status
-      loadMembersQuietly();
-    }, 2000); // Poll every 2 seconds
-
-    return () => clearInterval(interval);
-  }, [groupId]);
 
   const loadGroup = async () => {
     try {
@@ -142,7 +131,7 @@ export const GroupDetailPage: React.FC = () => {
   const renderContent = () => {
     switch (activeTab) {
       case 'chat':
-        return <ChatTab groupId={Number(groupId)} />;
+        return <ChatTab groupId={Number(groupId) } onUserCountUpdate={(count) => setOnlineMembers(count)} />;
       case 'documents':
         return (
           <DocumentsTab

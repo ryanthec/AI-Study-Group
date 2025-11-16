@@ -40,7 +40,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             padding: 24,
             boxShadow: isDark 
               ? '0 2px 8px rgba(0,0,0,0.45)' 
-              : '0 2px 8px rgba(0,0,0,0.06)', // ✅ Dynamic shadow
+              : '0 2px 8px rgba(0,0,0,0.15)', // ✅ Dynamic shadow
           }}
         >
           {children}

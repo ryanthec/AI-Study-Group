@@ -4,6 +4,7 @@ import { TeamOutlined, SearchOutlined, PlusOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { studyGroupService } from '../../services/studyGroup.service';
 import type { StudyGroup } from '../../types/studyGroup.types';
+import { useTheme } from '../../hooks/useTheme';
 
 const { Title, Text } = Typography;
 
@@ -11,6 +12,7 @@ const subjects = ['Math', 'Science', 'English', 'History', 'Computer Science', '
 
 export const BrowseGroupsPage: React.FC = () => {
   const navigate = useNavigate();
+  const { isDark } = useTheme();
   const [groups, setGroups] = useState<StudyGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -51,6 +53,16 @@ export const BrowseGroupsPage: React.FC = () => {
     }
   };
 
+
+  const cardStyle = {
+    boxShadow: isDark
+      ? '0 2px 8px rgba(0, 0, 0, 0.45)'
+      : '0 2px 8px rgba(0, 0, 0, 0.2)',
+    border: isDark ? '1px solid #434343' : '1px solid #9fa1a3ff',
+    borderRadius: '8px',
+    marginBottom: '16px',
+  };
+
   return (
     <div style={{ padding: '24px', maxWidth: 1200, margin: '0 auto' }}>
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
@@ -65,7 +77,7 @@ export const BrowseGroupsPage: React.FC = () => {
           </Button>
         </div>
 
-        <Card>
+        <Card style={cardStyle}>
           <Row gutter={16} style={{ marginBottom: 16 }}>
             <Col xs={24} sm={16}>
               <Input
@@ -94,13 +106,20 @@ export const BrowseGroupsPage: React.FC = () => {
               </Select>
             </Col>
           </Row>
-
+        </Card>
+        <Card style={cardStyle}>
           <List
             loading={loading}
             dataSource={groups}
+            locale={{ emptyText: <Empty description="No study groups found" /> }}
             renderItem={(group) => (
               <List.Item
-                key={group.id}
+                style={{
+                  borderBottom: isDark
+                    ? '1px solid #434343'
+                    : '1px solid #767677ff',
+                  padding: '16px 0',
+                }}
                 actions={[
                   group.is_member ? (
                     <Button type="primary" onClick={() => navigate(`/groups/${group.id}`)}>

@@ -3,6 +3,7 @@ import { Table, Button, Space, message, Popconfirm, Empty, Spin, Tooltip, Tag, C
 import { DeleteOutlined, DownloadOutlined } from '@ant-design/icons';
 import { studyGroupService } from '../../services/studyGroup.service';
 import type { ColumnsType } from 'antd/es/table';
+import { useTheme } from '../../hooks/useTheme';
 
 interface Document {
   id: number;
@@ -27,6 +28,7 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
   isAdmin,
   currentUserId,
 }) => {
+  const { isDark } = useTheme();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<number | null>(null);
@@ -141,22 +143,81 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
 
   return (
     <div style={{ padding: '24px' }}>
-      <Card>
+      <Card
+       style={{
+          boxShadow: isDark
+            ? '0 2px 8px rgba(0, 0, 0, 0.45)'
+            : '0 2px 8px rgba(0, 0, 0, 0.2)',
+          border: isDark ? '1px solid #434343' : '1px solid #9fa1a3ff',
+          borderRadius: '8px',
+        }}>
         {documents.length === 0 ? (
-          <Empty
-            description="No documents uploaded yet"
-            style={{ marginTop: '50px' }}
-          />
+          <Empty description="No documents uploaded yet" />
         ) : (
           <Table
-            columns={columns}
             dataSource={documents}
+            columns={columns}
             rowKey="id"
-            pagination={{ pageSize: 10 }}
-            scroll={{ x: 600 }}
+            pagination={false}
+            bordered
+            style={{
+              // Custom table styling
+              borderRadius: '8px',
+              overflow: 'hidden',
+            }}
+            className={isDark ? 'dark-table' : 'light-table'}
+            // Add custom component styling
+            components={{
+              header: {
+                cell: (props: any) => (
+                  <th
+                    {...props}
+                    style={{
+                      background: isDark ? '#2b2d31' : '#f5f7f9',
+                      fontWeight: 600,
+                      borderBottom: isDark
+                        ? '2px solid #434343'
+                        : '2px solid #d1d3d6',
+                      ...props.style,
+                    }}
+                  />
+                ),
+              },
+            }}
           />
         )}
       </Card>
+
+      {/* Custom table CSS */}
+      <style>{`
+        .light-table .ant-table {
+          border: 1px solid #bebfc0ff;
+        }
+        .light-table .ant-table-thead > tr > th {
+          background: #f5f7f9 !important;
+          border-bottom: 2px solid #6f7070ff !important;
+          font-weight: 600;
+        }
+        .light-table .ant-table-tbody > tr > td {
+          border-bottom: 1px solid #b0b0b1ff;
+        }
+        .light-table .ant-table-tbody > tr:hover > td {
+          background: #f9fafb !important;
+        }
+        
+        .dark-table .ant-table {
+          border: 1px solid #434343;
+        }
+        .dark-table .ant-table-thead > tr > th {
+          background: #2b2d31 !important;
+          border-bottom: 2px solid #434343 !important;
+          font-weight: 600;
+        }
+        .dark-table .ant-table-tbody > tr > td {
+          border-bottom: 1px solid #3a3c40;
+        }
+      `}</style>
+
     </div>
   );
 };

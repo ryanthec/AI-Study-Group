@@ -45,7 +45,7 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
     borderRight: isDark ? '1px solid #434343' : '1px solid #f0f0f0',
     boxShadow: isDark
       ? '1px 0 4px rgba(0, 0, 0, 0.45)'
-      : '1px 0 4px rgba(0, 0, 0, 0.05)',
+      : '1px 0 4px rgba(0, 0, 0, 0.15)',
     height: 'calc(100vh - 64px)',
     overflow: 'auto',
     position: 'fixed',
@@ -56,7 +56,7 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
   };
 
   // Colors for borders and backgrounds
-  const borderColor = isDark ? '#434343' : '#f0f0f0';
+  const borderColor = isDark ? '#434343' : '#9fa1a3ff';
   const textSecondaryColor = isDark ? '#a6a6a6' : '#666';
   const actionsBackground = isDark ? '#141414' : '#fafafa';
 
