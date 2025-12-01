@@ -5,8 +5,16 @@ export interface User {
   firstName: string;
   lastName: string;
   avatar?: string;
+  bio?: string;
+  isActive: boolean;
+  isVerified: boolean;
+  preferences?: {
+    avatarColor?: string;
+    theme?: 'light' | 'dark' | 'system';
+    [key: string]: any;
+  };
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
 }
 
 export interface LoginRequest {

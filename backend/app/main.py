@@ -1,12 +1,13 @@
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 import os
 
 from .core.database import engine, create_tables
 from .config import settings
-from .api.v1 import auth, study_groups, dashboard, chat, invitations, documents
-from .models import user  # Import to register models
+from .api.v1 import auth, study_groups, dashboard, chat, invitations, documents, users
+from .models import user
 
 # Create tables on startup
 create_tables()
@@ -29,6 +30,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Create upload dir if not exists
+os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+
+# Mount the uploads directory to serve static files
+# This means http://localhost:8000/uploads/xyz.png -> serves file from settings.UPLOAD_DIR
+app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads")
+
+
 # Health check endpoint (for Docker healthcheck)
 @app.get("/health")
 async def health_check():
@@ -36,6 +45,7 @@ async def health_check():
 
 # Include API routes
 app.include_router(auth.router, prefix="/api/v1")
+app.include_router(users.router, prefix="/api/v1")
 app.include_router(study_groups.router, prefix="/api/v1")
 app.include_router(dashboard.router, prefix="/api/v1")
 app.include_router(chat.router, prefix="/api/v1")

@@ -25,7 +25,7 @@ import { CreateGroupPage } from './pages/groups/CreateGroupPage';
 import { GroupDetailPage } from './pages/groups/GroupDetailPage';
 import { EditGroupPage } from './pages/groups/EditGroupPage';
 import { AcceptInvitationPage } from './pages/groups/AcceptInvitationPage';
-
+import { AccountDetailsPage } from './pages/dashboard/AccountDetailsPage';
 
 
 // Create React Query client
@@ -102,6 +102,18 @@ const AppContent: React.FC = () => {
             </ProtectedRoute>
           }
         />
+
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <Layout>
+                <AccountDetailsPage />
+              </Layout>
+            </ProtectedRoute>
+          }
+        />
+
         <Route
           path="/groups"
           element={

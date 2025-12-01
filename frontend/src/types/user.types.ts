@@ -8,6 +8,7 @@ export interface Profile {
 
 export interface UserPreferences {
   theme: 'light' | 'dark' | 'system';
+  avatarColor?: string;
   notifications: {
     email: boolean;
     push: boolean;
@@ -27,6 +28,10 @@ export interface User {
   id: string;
   username: string;
   email: string;
+  firstName?: string; 
+  lastName?: string;
+  avatar?: string;
+  bio?: string;
   profile: Profile;
   preferences?: UserPreferences;
   roles: UserRole[];
@@ -35,11 +40,11 @@ export interface User {
 }
 
 export interface UpdateProfileRequest {
+  username?: string;
   firstName?: string;
   lastName?: string;
-  avatar?: string;
   bio?: string;
-  location?: string;
+  preferences?: Partial<UserPreferences>;
 }
 
 export interface UpdatePreferencesRequest {
