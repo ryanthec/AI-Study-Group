@@ -6,6 +6,7 @@ export const authService = {
   // Login user
   login: async (credentials: LoginRequest): Promise<AuthResponse> => {
     const response = await api.post('/auth/login', credentials);
+
     return response.data;
   },
 

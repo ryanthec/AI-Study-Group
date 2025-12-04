@@ -7,16 +7,20 @@ import { ArrowLeftOutlined } from '@ant-design/icons';
 // Services and components
 import { Navbar } from '../../components/layout/Navbar';
 import { studyGroupService } from '../../services/studyGroup.service';
+import { InviteMemberModal } from '../../components/email/InviteMemberModal';
+
 import { StudyGroupSidebar } from '../../components/studyGroup/StudyGroupSidebar';
 import { GroupDetailsTab } from '../../components/studyGroup/GroupDetailsTab';
+import { AgentSettingsTab } from '../../components/studyGroup/AgentSettingsTab';
 import { ChatTab } from '../../components/studyGroup/ChatTab';
 import { DocumentsTab } from '../../components/studyGroup/DocumentsTab';
-import { InviteMemberModal } from '../../components/email/InviteMemberModal';
+
 
 // Types and hooks
 import type { StudyGroup } from '../../types/studyGroup.types';
 import { useAuth } from '../../hooks/useAuth';
 import { useTheme } from '../../hooks/useTheme';
+
 
 export const GroupDetailPage: React.FC = () => {
   
@@ -28,7 +32,7 @@ export const GroupDetailPage: React.FC = () => {
   const { groupId } = useParams<{ groupId: string }>();
   const [group, setGroup] = useState<StudyGroup | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'details' | 'chat' | 'documents'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'chat' | 'documents' | 'agent settings'>('details');
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
   const [members, setMembers] = useState<any[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
@@ -138,6 +142,13 @@ export const GroupDetailPage: React.FC = () => {
             groupId={Number(groupId)}
             isAdmin={group?.is_admin || false}
             currentUserId={user?.id || ''}
+          />
+        );
+      case 'agent settings':
+        return (
+          <AgentSettingsTab
+            groupId={Number(groupId)}
+            isAdmin={group?.is_admin || false}
           />
         );
       case 'details':

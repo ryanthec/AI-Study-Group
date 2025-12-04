@@ -8,6 +8,7 @@ from typing import Optional, Dict, Any, List, Iterator, AsyncIterator
 from enum import Enum
 from dataclasses import dataclass
 import logging
+import re
 
 from .base_llm_model import BaseLLMModel
 from ..services.rag_service import RAGConfig, RAGService
@@ -23,6 +24,12 @@ class RAGMode(Enum):
     CONVERSATIONS_ONLY = "conversations_only"
     BOTH = "both"
 
+class QuestionDifficulty(Enum):
+    """Difficulty levels to determine Socratic depth."""
+    FACTUAL = "factual"  # Simple facts: "what is X?", "where is Y?"
+    CONCEPTUAL = "conceptual"  # Concepts: "why", "how", "explain"
+    APPLIED = "applied"  # Problems: "solve", "code", "math", "reasoning"
+    COMPLEX = "complex"  # Multi-step: "compare", "analyze", "design"
 
 @dataclass
 class TAConfig:
@@ -33,57 +40,69 @@ class TAConfig:
     top_p: float = 0.9
     top_k: int = 40
     use_socratic_prompting: bool = True
+    
+    # Configurable Socratic prompt limits per difficulty
+    socratic_prompt_limit_factual: int = 1  # "What is the largest country?" -> Just answer
+    socratic_prompt_limit_conceptual: int = 2  # "Why does it rain?" -> 1-2 guiding questions then explain
+    socratic_prompt_limit_applied: int = 2  # Coding/Math -> 1-2 hints then guide to answer
+    socratic_prompt_limit_complex: int = 3  # Multi-step -> 2-3 questions to guide thinking
+    
     enable_follow_ups: bool = True
-    follow_up_probability: float = 0.3  # 30% chance of follow-up
-    socratic_depth: int = 2  # Number of follow-up questions
+    follow_up_probability: float = 0.2  # 20% chance of follow-up question
+    
+    # Minimum confidence to provide direct answer
+    min_confidence_for_direct_answer: float = 0.7
 
 
 # ========================
 # System Prompts
 # ========================
 
-SOCRATIC_SYSTEM_PROMPT = """You are an expert Teaching Assistant with a passion for helping students develop critical thinking skills. 
+ADAPTIVE_SYSTEM_PROMPT = """You are an expert Teaching Assistant with a balanced approach to helping students learn.
 
-Your teaching philosophy:
-- Use Socratic prompting to guide students to their own understanding
-- Ask clarifying questions rather than immediately providing answers
-- Help students identify gaps in their reasoning
-- Encourage deeper exploration of concepts
-- Be supportive and patient while maintaining high academic standards
+YOUR TEACHING PHILOSOPHY:
+- Adapt your response based on the question type and student level
+- For factual questions: Provide clear, direct answers
+- For conceptual questions: Start with a guiding question, then explain concepts
+- For problem-solving: Provide hints and guide the student to solve it themselves
+- Build confidence by validating correct thinking and gently correcting misconceptions
 
-When answering questions:
-1. First, understand what the student already knows by asking clarifying questions
-2. Guide them with leading questions that help them think through the problem
-3. Provide hints and point them toward relevant concepts from their study materials
-4. Only provide direct answers when the student has exhausted their thinking or needs validation
-5. After providing an answer, ask follow-up questions to deepen understanding
+QUESTION-SPECIFIC STRATEGIES:
 
-Format your responses clearly with:
-- Questions to probe understanding
-- Hints that guide thinking
-- Brief explanations when needed
-- Connections to their study materials when relevant
-- Encouragement for their learning journey
+For FACTUAL questions (e.g., "What is...?", "Where is...?", "When did...?"):
+1. Provide the direct answer clearly
+2. Add brief context to help understanding
+3. Suggest related concepts if appropriate
+Format: "The answer is X. Here's why... You can also explore..."
 
-Remember: The goal is not to give answers, but to help students become independent learners."""
+For CONCEPTUAL questions (e.g., "Why...?", "How does...?", "Explain..."):
+1. Optional: Ask ONE clarifying question to understand their level
+2. Explain the concept with analogies and examples
+3. Connect to their existing knowledge
+Format: "Before I explain, what do you already know about X? [After their response: Here's how it works...]"
 
-DEFAULT_SYSTEM_PROMPT = """You are an expert Teaching Assistant designed to help students learn and understand complex concepts.
+For PROBLEM-SOLVING (e.g., coding, math, reasoning):
+1. Ask ONE guiding question to understand their approach
+2. Provide hints without giving the answer
+3. Guide them toward the solution
+4. Verify their understanding
+Format: "I can help! Have you considered...? Here's a hint: ... Try applying this..."
 
-Your approach:
-- Explain concepts clearly and patiently
-- Provide examples when helpful
-- Connect new information to foundational knowledge
-- Encourage questions and deeper exploration
-- Support student learning through clear, structured responses
+For VALIDATION (e.g., "Is Russia the largest country?"):
+- Simply confirm or correct: "Yes, you're right!" or "Not quite. Actually..."
+- Brief explanation of why
 
-When answering questions:
-1. Understand the student's current level and what they're trying to learn
-2. Break down complex concepts into manageable parts
-3. Use relevant study materials when available
-4. Provide clear explanations with examples
-5. Suggest ways to practice or explore the concept further
+TONE & STYLE:
+- Be encouraging and supportive
+- Use clear, accessible language
+- Avoid unnecessary jargon
+- Keep responses focused and concise
+- Show enthusiasm for learning
 
-Maintain a supportive and professional tone while being thorough and accurate."""
+Remember: Your goal is to help students become independent thinkers."""
+
+FOLLOW_UP_TEMPLATE = """Great question! Before I explain {topic}, what do you already know about it? 
+This will help me pitch my explanation at the right level for you."""
 
 RAG_CONTEXT_TEMPLATE = """Based on the study materials available, here's relevant context:
 
@@ -132,6 +151,137 @@ class TeachingAssistantAgent:
             f"Initialized TeachingAssistantAgent with RAG mode: {self.config.rag_mode.value}"
         )
     
+
+    # ========================
+    # Question Analysis
+    # ========================
+
+    def _detect_question_difficulty(self, question: str) -> QuestionDifficulty:
+        """
+        Detect question difficulty based on patterns.
+        
+        Args:
+            question: The student's question
+            
+        Returns:
+            QuestionDifficulty enum value
+        """
+        question_lower = question.lower().strip()
+        
+        # FACTUAL - Direct information requests
+        factual_patterns = [
+            r'^what\s+is\s+',
+            r'^what\s+are\s+',
+            r'^where\s+is\s+',
+            r'^when\s+did\s+',
+            r'^who\s+is\s+',
+            r'^which\s+.*\?$',
+            r'^define\s+',
+            r'^list\s+',
+            r'is\s+.*\s+the\s+',  # "Is Russia the largest country?"
+        ]
+        
+        # CONCEPTUAL - Understanding & explanation
+        conceptual_patterns = [
+            r'^why\s+',
+            r'^how\s+.*\s+work',
+            r'^explain\s+',
+            r'^describe\s+',
+            r'^what\s+is\s+the\s+difference',
+            r'^compare\s+',
+        ]
+        
+        # APPLIED - Problem solving & coding
+        applied_patterns = [
+            r'code\s+',
+            r'write\s+.*\s+function',
+            r'solve\s+',
+            r'calculate\s+',
+            r'implement\s+',
+            r'debug\s+',
+            r'fix\s+',
+            r'algorithm\s+',
+            r'error\s+',
+        ]
+        
+        # COMPLEX - Multi-step analysis
+        complex_patterns = [
+            r'^analyze\s+',
+            r'^design\s+',
+            r'^evaluate\s+',
+            r'^what\s+would\s+happen',
+            r'^how\s+would\s+you\s+',
+            r'^suggest\s+',
+            r'^hypothesize\s+',
+        ]
+        
+        # Check patterns in order (more specific first)
+        for pattern in applied_patterns:
+            if re.search(pattern, question_lower):
+                return QuestionDifficulty.APPLIED
+        
+        for pattern in complex_patterns:
+            if re.search(pattern, question_lower):
+                return QuestionDifficulty.COMPLEX
+        
+        for pattern in conceptual_patterns:
+            if re.search(pattern, question_lower):
+                return QuestionDifficulty.CONCEPTUAL
+        
+        for pattern in factual_patterns:
+            if re.search(pattern, question_lower):
+                return QuestionDifficulty.FACTUAL
+        
+        # Default to conceptual for ambiguous questions
+        return QuestionDifficulty.CONCEPTUAL
+
+    def _get_socratic_prompt_limit(self, difficulty: QuestionDifficulty) -> int:
+        """
+        Get the Socratic prompt limit based on question difficulty.
+        
+        Args:
+            difficulty: QuestionDifficulty enum value
+            
+        Returns:
+            Maximum number of Socratic prompts for this difficulty
+        """
+        limits = {
+            QuestionDifficulty.FACTUAL: self.config.socratic_prompt_limit_factual,
+            QuestionDifficulty.CONCEPTUAL: self.config.socratic_prompt_limit_conceptual,
+            QuestionDifficulty.APPLIED: self.config.socratic_prompt_limit_applied,
+            QuestionDifficulty.COMPLEX: self.config.socratic_prompt_limit_complex,
+        }
+        return limits.get(difficulty, 2)
+
+    def _build_adaptive_system_prompt(
+        self,
+        difficulty: QuestionDifficulty,
+        prompt_limit: int
+    ) -> str:
+        """
+        Build an adaptive system prompt based on question difficulty.
+        
+        Args:
+            difficulty: Detected question difficulty
+            prompt_limit: Maximum Socratic prompts for this difficulty
+            
+        Returns:
+            Customized system prompt
+        """
+        # If factual question and limit is 1, instruct model to give direct answer
+        if difficulty == QuestionDifficulty.FACTUAL and prompt_limit == 1:
+            return f"""{ADAPTIVE_SYSTEM_PROMPT}
+
+            IMPORTANT FOR THIS QUESTION:
+            This appears to be a factual question requiring direct information.
+            Respond with a clear, direct answer followed by brief context.
+            Do NOT ask clarifying questions or probe for more information.
+            Keep response concise and informative."""
+        
+        return ADAPTIVE_SYSTEM_PROMPT
+
+
+
     # ========================
     # Core Functionality
     # ========================
@@ -148,8 +298,8 @@ class TeachingAssistantAgent:
         custom_top_k: Optional[float] = None,
     ) -> str:
         """
-        Answer a student's question using Socratic prompting and optional RAG.
-        
+        Answer a student's question using adaptive Socratic prompting and optional RAG.
+
         Args:
             session_id: Chat session ID (tied to study group)
             group_id: Study group ID for RAG context
@@ -157,24 +307,24 @@ class TeachingAssistantAgent:
             use_rag: Whether to use RAG for context
             db_session: Database session for RAG (required if use_rag=True and RAG mode is not DISABLED)
             custom_temperature: Optional temperature override
-            
+            custom_top_p: Optional top_p override
+            custom_top_k: Optional top_k override
+
         Returns:
             AI-generated response with optional RAG context
-            
+
         Raises:
             ValueError: If RAG is needed but not properly configured
         """
+        # Detect question difficulty
+        difficulty = self._detect_question_difficulty(question)
+        prompt_limit = self._get_socratic_prompt_limit(difficulty)
         
-        # Prepare system prompt
-        system_prompt = (
-            SOCRATIC_SYSTEM_PROMPT 
-            if self.config.use_socratic_prompting 
-            else DEFAULT_SYSTEM_PROMPT
-        )
-        
+        # Build adaptive system prompt
+        system_prompt = self._build_adaptive_system_prompt(difficulty, prompt_limit)
+
         # Prepare user message with optional RAG context
         user_message = question
-        
         if use_rag and self.config.rag_mode != RAGMode.DISABLED:
             if self.rag_service is None:
                 logger.warning("RAG requested but service not configured, proceeding without RAG")
@@ -187,7 +337,7 @@ class TeachingAssistantAgent:
                     )
                 except Exception as e:
                     logger.error(f"RAG retrieval failed: {str(e)}, proceeding without RAG")
-        
+
         # Generate response
         temperature = custom_temperature or self.config.temperature
         top_p = custom_top_p or self.config.top_p
@@ -203,10 +353,9 @@ class TeachingAssistantAgent:
             max_output_tokens=self.config.max_output_tokens,
             use_chat_history=True
         )
-        
+
         return response
-    
-    
+
     async def answer_question_stream(
         self,
         session_id: str,
@@ -219,10 +368,10 @@ class TeachingAssistantAgent:
         custom_top_k: Optional[float] = None,
     ) -> AsyncIterator[str]:
         """
-        Answer a student's question using Socratic prompting and optional RAG (streaming).
-        
+        Answer a student's question using adaptive Socratic prompting and optional RAG (streaming).
+
         Yields text deltas as they are generated. RAG retrieval happens once before streaming begins.
-        
+
         Args:
             session_id: Chat session ID (tied to study group)
             group_id: Study group ID for RAG context
@@ -232,24 +381,22 @@ class TeachingAssistantAgent:
             custom_temperature: Optional temperature override
             custom_top_p: Optional top_p override
             custom_top_k: Optional top_k override
-            
+
         Yields:
             Text deltas as the response is generated
-            
+
         Raises:
             ValueError: If RAG is needed but not properly configured
         """
+        # Detect question difficulty
+        difficulty = self._detect_question_difficulty(question)
+        prompt_limit = self._get_socratic_prompt_limit(difficulty)
         
-        # Prepare system prompt
-        system_prompt = (
-            SOCRATIC_SYSTEM_PROMPT 
-            if self.config.use_socratic_prompting 
-            else DEFAULT_SYSTEM_PROMPT
-        )
-        
+        # Build adaptive system prompt
+        system_prompt = self._build_adaptive_system_prompt(difficulty, prompt_limit)
+
         # Prepare user message with optional RAG context
         user_message = question
-        
         if use_rag and self.config.rag_mode != RAGMode.DISABLED:
             if self.rag_service is None:
                 logger.warning("RAG requested but service not configured, proceeding without RAG")
@@ -262,7 +409,7 @@ class TeachingAssistantAgent:
                     )
                 except Exception as e:
                     logger.error(f"RAG retrieval failed: {str(e)}, proceeding without RAG")
-        
+
         # Generate response
         temperature = custom_temperature or self.config.temperature
         top_p = custom_top_p or self.config.top_p
@@ -279,7 +426,6 @@ class TeachingAssistantAgent:
             use_chat_history=True
         ):
             yield chunk
-        
 
     def _prepare_message_with_rag(
         self,
@@ -289,16 +435,15 @@ class TeachingAssistantAgent:
     ) -> str:
         """
         Retrieve relevant context using RAG and prepare enhanced message.
-        
+
         Args:
             question: Original question
             group_id: Study group ID
             db_session: Database session
-            
+
         Returns:
             Question with RAG context prepended
         """
-        
         # Configure RAG based on agent config
         rag_config = RAGConfig(
             include_documents=(
@@ -310,7 +455,7 @@ class TeachingAssistantAgent:
             top_k_documents=3,
             top_k_conversations=3
         )
-        
+
         # Retrieve context
         context_dict = RAGService.retrieve_context(
             db=db_session,
@@ -318,70 +463,87 @@ class TeachingAssistantAgent:
             group_id=group_id,
             config=rag_config
         )
-        
+
         # Format context for prompt
         formatted_context = RAGService.format_context_for_prompt(
             context=context_dict,
             config=rag_config
         )
-        
+
         # Prepare enhanced message
         enhanced_message = (
-            f"{RAG_CONTEXT_TEMPLATE.format(context=formatted_context)}\n\n"
+            f"Based on study materials:\n{formatted_context}\n\n"
             f"Student Question: {question}"
         )
-        
+
         return enhanced_message
-    
-    # ========================
-    # RAG Configuration
-    # ========================
-    
-    def set_rag_mode(self, rag_mode: RAGMode) -> None:
-        """
-        Change RAG mode for the agent.
-        
-        Args:
-            rag_mode: New RAG mode (DISABLED, DOCUMENTS_ONLY, CONVERSATIONS_ONLY, or BOTH)
-        """
-        self.config.rag_mode = rag_mode
-        logger.info(f"RAG mode changed to: {rag_mode.value}")
-    
-    def enable_rag(self) -> None:
-        """Enable RAG with documents only."""
-        self.set_rag_mode(RAGMode.DOCUMENTS_ONLY)
-    
-    def disable_rag(self) -> None:
-        """Disable RAG."""
-        self.set_rag_mode(RAGMode.DISABLED)
-    
-    def is_rag_enabled(self) -> bool:
-        """Check if RAG is currently enabled."""
-        return self.config.rag_mode != RAGMode.DISABLED
     
     # ========================
     # Configuration Management
     # ========================
     
-    def set_socratic_mode(self, enabled: bool) -> None:
-        """Enable or disable Socratic prompting."""
-        self.config.use_socratic_prompting = enabled
-        logger.info(f"Socratic mode: {'enabled' if enabled else 'disabled'}")
-    
+    def set_socratic_prompt_limit(
+        self,
+        difficulty: QuestionDifficulty,
+        limit: int
+    ) -> None:
+        """
+        Set Socratic prompt limit for a specific difficulty level.
+        
+        Args:
+            difficulty: QuestionDifficulty enum
+            limit: Maximum number of Socratic prompts (0-5 recommended)
+        """
+        if not 0 <= limit <= 5:
+            raise ValueError("Socratic prompt limit must be between 0 and 5")
+        
+        limits = {
+            QuestionDifficulty.FACTUAL: "socratic_prompt_limit_factual",
+            QuestionDifficulty.CONCEPTUAL: "socratic_prompt_limit_conceptual",
+            QuestionDifficulty.APPLIED: "socratic_prompt_limit_applied",
+            QuestionDifficulty.COMPLEX: "socratic_prompt_limit_complex",
+        }
+        
+        attr = limits[difficulty]
+        setattr(self.config, attr, limit)
+        logger.info(f"Socratic prompt limit for {difficulty.value} set to {limit}")
+
+    def set_rag_mode(self, rag_mode: RAGMode) -> None:
+        """
+        Change RAG mode for the agent.
+
+        Args:
+            rag_mode: New RAG mode (DISABLED, DOCUMENTS_ONLY, CONVERSATIONS_ONLY, or BOTH)
+        """
+        self.config.rag_mode = rag_mode
+        logger.info(f"RAG mode changed to: {rag_mode.value}")
+
+    def enable_rag(self) -> None:
+        """Enable RAG with documents only."""
+        self.set_rag_mode(RAGMode.DOCUMENTS_ONLY)
+
+    def disable_rag(self) -> None:
+        """Disable RAG."""
+        self.set_rag_mode(RAGMode.DISABLED)
+
+    def is_rag_enabled(self) -> bool:
+        """Check if RAG is currently enabled."""
+        return self.config.rag_mode != RAGMode.DISABLED
+
     def set_temperature(self, temperature: float) -> None:
         """Set default temperature for responses."""
         if not 0 <= temperature <= 2:
             raise ValueError("Temperature must be between 0 and 2")
         self.config.temperature = temperature
         logger.info(f"Temperature set to: {temperature}")
-    
+
     def set_max_tokens(self, max_tokens: int) -> None:
         """Set maximum tokens for responses."""
         if max_tokens < 1:
             raise ValueError("max_tokens must be at least 1")
         self.config.max_output_tokens = max_tokens
         logger.info(f"Max tokens set to: {max_tokens}")
-    
+
     def get_config(self) -> TAConfig:
         """Get current agent configuration."""
         return self.config
@@ -441,5 +603,11 @@ class TeachingAssistantAgent:
             "socratic_prompting": self.config.use_socratic_prompting,
             "temperature": self.config.temperature,
             "max_tokens": self.config.max_output_tokens,
+            "socratic_limits": {
+                "factual": self.config.socratic_prompt_limit_factual,
+                "conceptual": self.config.socratic_prompt_limit_conceptual,
+                "applied": self.config.socratic_prompt_limit_applied,
+                "complex": self.config.socratic_prompt_limit_complex,
+            },
             "active_sessions": len(self.base_llm.sessions)
         }

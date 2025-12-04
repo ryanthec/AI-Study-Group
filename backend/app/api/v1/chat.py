@@ -18,7 +18,7 @@ from ...models.study_group_message import MessageType
 from ...models.user import User
 
 # Agents
-from ...agents.teaching_agent import TeachingAssistantAgent, TAConfig, RAGMode
+from ...agents.teaching_agent import TeachingAssistantAgent, TAConfig, RAGMode, QuestionDifficulty
 from ...agents.base_llm_model import BaseLLMModel
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -28,11 +28,15 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 base_llm = BaseLLMModel()
 teaching_agent = TeachingAssistantAgent(
     base_llm=base_llm,
-    rag_service=None,  # Add RAG later when you implement RAG toggle
+    rag_service=None,  # Add RAG later after RAG toggle is implemented
     config=TAConfig(
-        rag_mode=RAGMode.DISABLED,  # Disabled for now
+        rag_mode=RAGMode.DISABLED,
         use_socratic_prompting=True,
         temperature=0.7,
+        socratic_prompt_limit_factual=1,
+        socratic_prompt_limit_conceptual=2,
+        socratic_prompt_limit_applied=2,
+        socratic_prompt_limit_complex=3,
     )
 )
 
@@ -88,11 +92,11 @@ async def stream_ai_response(websocket: WebSocket, group_id: int, user_message: 
             session_id=session_id,
             group_id=group_id,
             question=clean_question,
-            use_rag=False,
+            use_rag=False, #Update later when RAG is implemented
             db_session=None
         )
         
-        # ✅ Use async for to iterate
+        # Use async for to iterate
         async for chunk in stream_generator:
             full_response.append(chunk)
             # Stream each chunk to all group members

@@ -10,6 +10,7 @@ import {
   UserAddOutlined,
   ArrowLeftOutlined,
   CrownOutlined,
+  RobotOutlined,
 } from '@ant-design/icons';
 import type { StudyGroup } from '../../types/studyGroup.types';
 import { useTheme } from '../../hooks/useTheme';
@@ -17,8 +18,8 @@ import { useTheme } from '../../hooks/useTheme';
 interface StudyGroupSidebarProps {
   groupId: number;
   group: StudyGroup | null;
-  activeTab: 'details' | 'chat' | 'documents';
-  onTabChange: (tab: 'details' | 'chat' | 'documents') => void;
+  activeTab: 'details' | 'chat' | 'documents' | 'agent settings';
+  onTabChange: (tab: 'details' | 'chat' | 'documents' | 'agent settings') => void;
   onEdit?: () => void;
   onInvite?: () => void;
   onDelete?: () => void;
@@ -80,6 +81,12 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
       icon: <FileOutlined />,
       label: 'Documents',
       onClick: () => onTabChange('documents'),
+    },
+    {
+      key: 'agent settings',
+      icon: <RobotOutlined />,
+      label: 'Agent Settings',
+      onClick: () => onTabChange('agent settings'),
     },
   ];
 

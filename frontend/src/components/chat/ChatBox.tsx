@@ -302,7 +302,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) 
       );
     }
 
-    // ✅ Discord-style message layout
+    // Discord-style message layout
     return (
       <div
         key={msg.id}
@@ -360,8 +360,16 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) 
                   : '#313338',
               }}
             >
-              {isAI ? 'AI Assistant' : msg.user?.username || 'Unknown'}
+              {isAI ? 'TeachingAI' : msg.user?.username || 'Unknown'}
             </Text>
+
+            {/* Added the BOT Tag here */}
+            {isAI && (
+               <Tag color="purple" style={{ fontSize: '10px', padding: '0 4px' }}>
+                 BOT
+               </Tag>
+            )}
+
             <Text
               type="secondary"
               style={{
@@ -383,6 +391,8 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) 
               lineHeight: '1.375rem',
               color: colors.otherText,
               wordWrap: 'break-word',
+              // Added whiteSpace property to preserve newlines/formatting
+              whiteSpace: 'pre-wrap', 
             }}
           >
             {msg.content}
