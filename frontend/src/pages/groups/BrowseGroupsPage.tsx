@@ -16,21 +16,21 @@ export const BrowseGroupsPage: React.FC = () => {
   const [groups, setGroups] = useState<StudyGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedSubject, setSelectedSubject] = useState('');
+  const [moduleFilter, setModuleFilter] = useState('');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const pageSize = 10;
 
   useEffect(() => {
     searchGroups();
-  }, [page, searchQuery, selectedSubject]);
+  }, [page, searchQuery, moduleFilter]);
 
   const searchGroups = async () => {
     try {
       setLoading(true);
       const data = await studyGroupService.searchGroups(
         searchQuery,
-        selectedSubject,
+        moduleFilter,
         page,
         pageSize
       );
@@ -90,20 +90,13 @@ export const BrowseGroupsPage: React.FC = () => {
               />
             </Col>
             <Col xs={24} sm={8}>
-              <Select
+              <Input
                 size="large"
-                placeholder="Filter by subject"
-                style={{ width: '100%' }}
-                value={selectedSubject || undefined}
-                onChange={setSelectedSubject}
+                placeholder="Filter by module..."
+                value={moduleFilter}
+                onChange={(e) => setModuleFilter(e.target.value)}
                 allowClear
-              >
-                {subjects.map((subject) => (
-                  <Select.Option key={subject} value={subject}>
-                    {subject}
-                  </Select.Option>
-                ))}
-              </Select>
+              />
             </Col>
           </Row>
         </Card>
@@ -149,7 +142,7 @@ export const BrowseGroupsPage: React.FC = () => {
                     <Space direction="vertical" size={4}>
                       <Text type="secondary">{group.description || 'No description'}</Text>
                       <Space size={12}>
-                        {group.subject && <Tag>{group.subject}</Tag>}
+                        {group.module && <Tag>{group.module}</Tag>}
                         <Text type="secondary">
                           {group.member_count}/{group.max_members} members
                         </Text>

@@ -40,7 +40,7 @@ export const EditGroupPage: React.FC = () => {
       form.setFieldsValue({
         name: data.name,
         description: data.description,
-        subject: data.subject,
+        module: data.module,
         max_members: data.max_members,
       });
     } catch (error) {
@@ -98,14 +98,11 @@ export const EditGroupPage: React.FC = () => {
               />
             </Form.Item>
 
-            <Form.Item label="Subject" name="subject">
-              <Select size="large" placeholder="Select a subject" allowClear>
-                {subjects.map((subject) => (
-                  <Select.Option key={subject} value={subject}>
-                    {subject}
-                  </Select.Option>
-                ))}
-              </Select>
+            <Form.Item label="Module" name="module">
+               <Input 
+                size="large" 
+                placeholder="e.g., SC1005 -  Digital Logic"
+              />
             </Form.Item>
 
             <Form.Item

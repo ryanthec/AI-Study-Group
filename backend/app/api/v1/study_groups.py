@@ -98,14 +98,14 @@ async def get_my_study_groups(
 @router.get("/search", response_model=StudyGroupListResponse)
 async def search_study_groups(
     query: str = Query("", description="Search in name and description"),
-    subject: str = Query("", description="Filter by subject"),
+    module: str = Query("", description="Filter by module"),
     page: int = Query(1, ge=1),
     size: int = Query(10, ge=1, le=50),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Search and browse study groups"""
-    groups, total = StudyGroupService.search_groups(db, current_user.id, query, subject, page, size)
+    groups, total = StudyGroupService.search_groups(db, current_user.id, query, module, page, size)
     
     group_responses = []
     for group in groups:
@@ -166,7 +166,7 @@ async def get_group_members(
             current_user.id
         )
     else:
-        members = StudyGroupService.get_group_members(
+        members = StudyGroupService.get_group_members_with_status(
             db, 
             group_id, 
             current_user.id

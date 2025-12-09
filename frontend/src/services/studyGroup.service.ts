@@ -43,12 +43,12 @@ export const studyGroupService = {
   // Search/browse study groups
   searchGroups: async (
     query = '',
-    subject = '',
+    module = '',
     page = 1,
     size = 10
   ): Promise<StudyGroupListResponse> => {
     const response = await api.get('/study-groups/search', {
-      params: { query, subject, page, size },
+      params: { query, module, page, size }, 
     });
     return response.data;
   },

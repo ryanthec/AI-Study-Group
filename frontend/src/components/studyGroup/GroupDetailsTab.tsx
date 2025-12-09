@@ -53,8 +53,8 @@ export const GroupDetailsTab: React.FC<GroupDetailsTabProps> = ({
           <Descriptions.Item label="Description">
             {group.description || 'No description provided'}
           </Descriptions.Item>
-          <Descriptions.Item label="Subject">
-            {group.subject ? <Tag>{group.subject}</Tag> : <Tag>N/A</Tag>}
+          <Descriptions.Item label="Module">
+            {group.module ? <Tag>{group.module}</Tag> : <Tag>N/A</Tag>}
           </Descriptions.Item>
           <Descriptions.Item label="Status">
             <Tag color={group.status === 'active' ? 'green' : 'red'}>

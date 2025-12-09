@@ -12,21 +12,21 @@ class StudyGroupStatusEnum(str, Enum):
 class CreateStudyGroupRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = Field(None, max_length=500)
-    subject: Optional[str] = Field(None, max_length=50)
+    module: Optional[str] = Field(None, max_length=100)
     max_members: int = Field(default=5, ge=2, le=10)
 
 
 class UpdateStudyGroupRequest(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     description: Optional[str] = Field(None, max_length=500)
-    subject: Optional[str] = Field(None, max_length=50)
+    module: Optional[str] = Field(None, max_length=100)
     max_members: Optional[int] = Field(None, ge=2, le=10)
 
 class StudyGroupResponse(BaseModel):
     id: int
     name: str
     description: Optional[str]
-    subject: Optional[str]
+    module: Optional[str]
     max_members: int
     status: str
     created_at: Optional[datetime]

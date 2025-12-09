@@ -76,14 +76,11 @@ export const CreateGroupPage: React.FC = () => {
               />
             </Form.Item>
 
-            <Form.Item label="Subject" name="subject">
-              <Select size="large" placeholder="Select a subject" allowClear>
-                {subjects.map((subject) => (
-                  <Select.Option key={subject} value={subject}>
-                    {subject}
-                  </Select.Option>
-                ))}
-              </Select>
+            <Form.Item label="Module" name="module">
+              <Input 
+                size="large" 
+                placeholder="e.g., SC1001, Intro to Computing" 
+              />
             </Form.Item>
 
             <Form.Item

@@ -2,7 +2,7 @@ export interface StudyGroup {
   id: number;
   name: string;
   description: string | null;
-  subject: string | null;
+  module: string | null;
   max_members: number;
   status: 'active' | 'completed' | 'cancelled';
   created_at: string;
@@ -16,14 +16,14 @@ export interface StudyGroup {
 export interface CreateStudyGroupRequest {
   name: string;
   description?: string;
-  subject?: string;
+  module?: string;
   max_members: number;
 }
 
 export interface UpdateStudyGroupRequest {
   name?: string;
   description?: string;
-  subject?: string;
+  module?: string;
   max_members?: number;
 }
 

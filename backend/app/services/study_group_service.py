@@ -101,7 +101,7 @@ class StudyGroupService:
         db_group = StudyGroup(
             name=group_data.name,
             description=group_data.description,
-            subject=group_data.subject,
+            module=group_data.module,
             max_members=group_data.max_members,
             creator_id=creator_id
         )
@@ -329,7 +329,7 @@ class StudyGroupService:
         return groups, total
 
     @staticmethod
-    def search_groups(db: Session, user_id: int, query: str = "", subject: str = "", page: int = 1, size: int = 10):
+    def search_groups(db: Session, user_id: int, query: str = "", module: str = "", page: int = 1, size: int = 10):
         offset = (page - 1) * size
         
         # Base query for active groups
@@ -346,8 +346,8 @@ class StudyGroupService:
                 )
             )
         
-        if subject:
-            db_query = db_query.filter(StudyGroup.subject.ilike(f"%{subject}%"))
+        if module:
+            db_query = db_query.filter(StudyGroup.module.ilike(f"%{module}%"))
         
         total = db_query.count()
         groups = db_query.offset(offset).limit(size).all()

@@ -186,14 +186,14 @@ export const AgentSettingsTab: React.FC<AgentSettingsTabProps> = ({
                 options={[
                   { label: 'Disabled - No context references', value: 'disabled' },
                   {
-                    label: 'Documents Only - Use uploaded materials',
+                    label: 'With Documents - Use uploaded materials as context',
                     value: 'documents_only',
                   },
-                  {
-                    label: 'Conversations Only - Use chat history',
-                    value: 'conversations_only',
-                  },
-                  { label: 'Both - Use all available context', value: 'both' },
+                  // {
+                  //   label: 'Conversations Only - Use chat history',
+                  //   value: 'conversations_only',
+                  // },
+                  // { label: 'Both - Use all available context', value: 'both' },
                 ]}
               />
               <Text type="secondary" style={{ marginTop: '8px', display: 'block' }}>

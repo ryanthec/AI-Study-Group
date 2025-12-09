@@ -17,7 +17,7 @@ class StudyGroup(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
     description = Column(Text)
-    subject = Column(String(50))  # Math, Science, etc.
+    module = Column(String(100))
     
     # Group settings
     max_members = Column(Integer, default=5)
@@ -42,7 +42,7 @@ class StudyGroup(Base):
             "id": self.id,
             "name": self.name,
             "description": self.description,
-            "subject": self.subject,
+            "module": self.module,
             "max_members": self.max_members,
             "status": self.status.value,
             "created_at": self.created_at.isoformat() if self.created_at else None,
