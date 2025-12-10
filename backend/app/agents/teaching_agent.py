@@ -39,8 +39,11 @@ class TAConfig:
     max_output_tokens: int = 2048
     top_p: float = 0.9
     top_k: int = 40
-    use_socratic_prompting: bool = True
     
+    # LLM difficulty check using classification prompt
+    use_llm_difficulty_check: bool = True
+
+    use_socratic_prompting: bool = True
     # Configurable Socratic prompt limits per difficulty
     socratic_prompt_limit_factual: int = 1  # "What is the largest country?" -> Just answer
     socratic_prompt_limit_conceptual: int = 2  # "Why does it rain?" -> 1-2 guiding questions then explain
@@ -70,39 +73,55 @@ YOUR TEACHING PHILOSOPHY:
 QUESTION-SPECIFIC STRATEGIES:
 
 For FACTUAL questions (e.g., "What is...?", "Where is...?", "When did...?"):
-1. Provide the direct answer clearly
-2. Add brief context to help understanding
-3. Suggest related concepts if appropriate
-Format: "The answer is X. Here's why... You can also explore..."
+1. Provide the direct answer clearly.
+2. Add brief context to help understanding.
+3. Suggest related concepts if appropriate.
+4. IMPORTANT: End your response by asking if the user wants details on a specific related aspect.
+Format: "The answer is X. ... Would you like to know more about [specific attribute, e.g., habitat/history/usage]?"
 
 For CONCEPTUAL questions (e.g., "Why...?", "How does...?", "Explain..."):
-1. Optional: Ask ONE clarifying question to understand their level
-2. Explain the concept with analogies and examples
-3. Connect to their existing knowledge
+1. Optional: Ask ONE clarifying question to understand their level.
+2. Explain the concept with analogies and examples.
+3. Connect to their existing knowledge.
 Format: "Before I explain, what do you already know about X? [After their response: Here's how it works...]"
 
 For PROBLEM-SOLVING (e.g., coding, math, reasoning):
-1. Ask ONE guiding question to understand their approach
-2. Provide hints without giving the answer
-3. Guide them toward the solution
-4. Verify their understanding
+1. Ask ONE guiding question to understand their approach.
+2. Provide hints without giving the answer.
+3. Guide them toward the solution.
 Format: "I can help! Have you considered...? Here's a hint: ... Try applying this..."
+*If your explanation becomes long or detailed, conclude by asking: "Would you like a quick summary of this approach?"*
+
+For COMPLEX questions (Analysis, Design, Multi-step):
+1. Break down the problem.
+2. Discuss trade-offs or perspectives.
+3. *If the response is extensive (more than 3 paragraphs), conclude by asking: "This was a detailed explanation. Would you like a brief summary?"*
 
 For VALIDATION (e.g., "Is Russia the largest country?"):
-- Simply confirm or correct: "Yes, you're right!" or "Not quite. Actually..."
-- Brief explanation of why
+- Simply confirm or correct.
+- Brief explanation of why.
 
 TONE & STYLE:
-- Be encouraging and supportive
-- Use clear, accessible language
-- Avoid unnecessary jargon
-- Keep responses focused and concise
-- Show enthusiasm for learning
+- Be encouraging and supportive.
+- Use clear, accessible language.
+- Keep responses focused.
+- Show enthusiasm for learning.
+"""
 
-Remember: Your goal is to help students become independent thinkers."""
+# Specific prompt for the classifier agent
+CLASSIFICATION_SYSTEM_PROMPT = """You are a precise classifier. 
+Categorize the user's question into exactly one of these 4 categories:
+1. FACTUAL (Simple facts, definitions, list requests)
+2. CONCEPTUAL (Explanations, 'how'/'why' questions, comparisons)
+3. APPLIED (Coding, math, debugging, solving specific problems)
+4. COMPLEX (Design, analysis, open-ended evaluation)
+
+Return ONLY the category name (e.g., "FACTUAL"). Do not add punctuation or explanation."""
+
 
 FOLLOW_UP_TEMPLATE = """Great question! Before I explain {topic}, what do you already know about it? 
 This will help me pitch my explanation at the right level for you."""
+
 
 RAG_CONTEXT_TEMPLATE = """Based on the study materials available, here's relevant context:
 
@@ -156,42 +175,40 @@ class TeachingAssistantAgent:
     # Question Analysis
     # ========================
 
-    def _detect_question_difficulty(self, question: str) -> QuestionDifficulty:
-        """
-        Detect question difficulty based on patterns.
-        
-        Args:
-            question: The student's question
+    async def _classify_with_llm(self, question: str) -> QuestionDifficulty:
+        """Second-level check using a fast LLM call."""
+        try:
+            response = await self.base_llm.generate_stateless_response(
+                prompt=f"Question: {question}",
+                system_prompt=CLASSIFICATION_SYSTEM_PROMPT,
+                max_output_tokens=10,
+                temperature=0.0
+            )
             
-        Returns:
-            QuestionDifficulty enum value
+            category = response.strip().upper()
+            
+            if "FACTUAL" in category: return QuestionDifficulty.FACTUAL
+            if "CONCEPTUAL" in category: return QuestionDifficulty.CONCEPTUAL
+            if "APPLIED" in category: return QuestionDifficulty.APPLIED
+            if "COMPLEX" in category: return QuestionDifficulty.COMPLEX
+            
+            return QuestionDifficulty.CONCEPTUAL # Default fallback
+            
+        except Exception as e:
+            logger.error(f"LLM classification failed: {e}")
+            return QuestionDifficulty.CONCEPTUAL
+
+    async def _detect_question_difficulty(self, question: str) -> QuestionDifficulty:
+        """
+        Detect question difficulty using Hybrid approach:
+        1. Fast Regex check for obvious signals (Code, Math).
+        2. LLM check for ambiguous/natural language questions (if enabled).
         """
         question_lower = question.lower().strip()
         
-        # FACTUAL - Direct information requests
-        factual_patterns = [
-            r'^what\s+is\s+',
-            r'^what\s+are\s+',
-            r'^where\s+is\s+',
-            r'^when\s+did\s+',
-            r'^who\s+is\s+',
-            r'^which\s+.*\?$',
-            r'^define\s+',
-            r'^list\s+',
-            r'is\s+.*\s+the\s+',  # "Is Russia the largest country?"
-        ]
+        # 1. Strong Regex Signals (Keep these as they are fast and usually correct)
         
-        # CONCEPTUAL - Understanding & explanation
-        conceptual_patterns = [
-            r'^why\s+',
-            r'^how\s+.*\s+work',
-            r'^explain\s+',
-            r'^describe\s+',
-            r'^what\s+is\s+the\s+difference',
-            r'^compare\s+',
-        ]
-        
-        # APPLIED - Problem solving & coding
+        # APPLIED - Code/Math keywords are usually distinct
         applied_patterns = [
             r'code\s+',
             r'write\s+.*\s+function',
@@ -201,10 +218,17 @@ class TeachingAssistantAgent:
             r'debug\s+',
             r'fix\s+',
             r'algorithm\s+',
-            r'error\s+',
-        ]
+            r'error\s+',]
+        for pattern in applied_patterns:
+            if re.search(pattern, question_lower):
+                return QuestionDifficulty.APPLIED
         
-        # COMPLEX - Multi-step analysis
+        # 2. If config allows, use LLM for the rest (Factual vs Conceptual is hard for Regex)
+        if self.config.use_llm_difficulty_check:
+            return await self._classify_with_llm(question)
+            
+        # 3. Fallback to Regex if LLM check disabled
+        # COMPLEX
         complex_patterns = [
             r'^analyze\s+',
             r'^design\s+',
@@ -212,28 +236,107 @@ class TeachingAssistantAgent:
             r'^what\s+would\s+happen',
             r'^how\s+would\s+you\s+',
             r'^suggest\s+',
-            r'^hypothesize\s+',
-        ]
-        
-        # Check patterns in order (more specific first)
-        for pattern in applied_patterns:
-            if re.search(pattern, question_lower):
-                return QuestionDifficulty.APPLIED
-        
+            r'^hypothesize\s+',]
         for pattern in complex_patterns:
             if re.search(pattern, question_lower):
                 return QuestionDifficulty.COMPLEX
         
-        for pattern in conceptual_patterns:
-            if re.search(pattern, question_lower):
-                return QuestionDifficulty.CONCEPTUAL
-        
+        # FACTUAL vs CONCEPTUAL (Regex is often weak here, hence LLM preference above)
+        factual_patterns = [
+            r'^what\s+is\s+',
+            r'^what\s+are\s+',
+            r'^where\s+is\s+',
+            r'^when\s+did\s+',
+            r'^who\s+is\s+',
+            r'^which\s+.*\?$',
+            r'^define\s+',
+            r'^list\s+',
+            r'is\s+.*\s+the\s+',]
         for pattern in factual_patterns:
             if re.search(pattern, question_lower):
                 return QuestionDifficulty.FACTUAL
-        
-        # Default to conceptual for ambiguous questions
+                
         return QuestionDifficulty.CONCEPTUAL
+    
+    # Old Regex-only method retained for reference
+    # def _detect_question_difficulty(self, question: str) -> QuestionDifficulty:
+    #     """
+    #     Detect question difficulty based on patterns.
+        
+    #     Args:
+    #         question: The student's question
+            
+    #     Returns:
+    #         QuestionDifficulty enum value
+    #     """
+    #     question_lower = question.lower().strip()
+        
+    #     # FACTUAL - Direct information requests
+    #     factual_patterns = [
+    #         r'^what\s+is\s+',
+    #         r'^what\s+are\s+',
+    #         r'^where\s+is\s+',
+    #         r'^when\s+did\s+',
+    #         r'^who\s+is\s+',
+    #         r'^which\s+.*\?$',
+    #         r'^define\s+',
+    #         r'^list\s+',
+    #         r'is\s+.*\s+the\s+',  # "Is Russia the largest country?"
+    #     ]
+        
+    #     # CONCEPTUAL - Understanding & explanation
+    #     conceptual_patterns = [
+    #         r'^why\s+',
+    #         r'^how\s+.*\s+work',
+    #         r'^explain\s+',
+    #         r'^describe\s+',
+    #         r'^what\s+is\s+the\s+difference',
+    #         r'^compare\s+',
+    #     ]
+        
+    #     # APPLIED - Problem solving & coding
+    #     applied_patterns = [
+    #         r'code\s+',
+    #         r'write\s+.*\s+function',
+    #         r'solve\s+',
+    #         r'calculate\s+',
+    #         r'implement\s+',
+    #         r'debug\s+',
+    #         r'fix\s+',
+    #         r'algorithm\s+',
+    #         r'error\s+',
+    #     ]
+        
+    #     # COMPLEX - Multi-step analysis
+    #     complex_patterns = [
+    #         r'^analyze\s+',
+    #         r'^design\s+',
+    #         r'^evaluate\s+',
+    #         r'^what\s+would\s+happen',
+    #         r'^how\s+would\s+you\s+',
+    #         r'^suggest\s+',
+    #         r'^hypothesize\s+',
+    #     ]
+        
+    #     # Check patterns in order (more specific first)
+    #     for pattern in applied_patterns:
+    #         if re.search(pattern, question_lower):
+    #             return QuestionDifficulty.APPLIED
+        
+    #     for pattern in complex_patterns:
+    #         if re.search(pattern, question_lower):
+    #             return QuestionDifficulty.COMPLEX
+        
+    #     for pattern in conceptual_patterns:
+    #         if re.search(pattern, question_lower):
+    #             return QuestionDifficulty.CONCEPTUAL
+        
+    #     for pattern in factual_patterns:
+    #         if re.search(pattern, question_lower):
+    #             return QuestionDifficulty.FACTUAL
+        
+    #     # Default to conceptual for ambiguous questions
+    #     return QuestionDifficulty.CONCEPTUAL
 
     def _get_socratic_prompt_limit(self, difficulty: QuestionDifficulty) -> int:
         """
@@ -317,7 +420,7 @@ class TeachingAssistantAgent:
             ValueError: If RAG is needed but not properly configured
         """
         # Detect question difficulty
-        difficulty = self._detect_question_difficulty(question)
+        difficulty = await self._detect_question_difficulty(question)
         prompt_limit = self._get_socratic_prompt_limit(difficulty)
         
         # Build adaptive system prompt
@@ -389,7 +492,7 @@ class TeachingAssistantAgent:
             ValueError: If RAG is needed but not properly configured
         """
         # Detect question difficulty
-        difficulty = self._detect_question_difficulty(question)
+        difficulty = await self._detect_question_difficulty(question)
         prompt_limit = self._get_socratic_prompt_limit(difficulty)
         
         # Build adaptive system prompt

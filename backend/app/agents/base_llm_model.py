@@ -175,6 +175,30 @@ class BaseLLMModel:
             return list(self.sessions.values())
         return [s for s in self.sessions.values() if s.group_id == group_id]
     
+    def get_session_history(self, session_id: str) -> Optional[List[Dict[str, str]]]:
+        """Get the chat history for a session."""
+        session = self.get_session(session_id)
+        if session is None:
+            return None
+        return session.get_history()
+    
+    def clear_session_history(self, session_id: str) -> bool:
+        """Clear the chat history for a session."""
+        session = self.get_session(session_id)
+        if session is None:
+            return False
+        session.clear_history()
+        logger.info(f"Cleared history for session {session_id}")
+        return True
+    
+    def get_session_summary(self, session_id: str) -> Optional[Dict[str, Any]]:
+        """Get summary information about a session."""
+        session = self.get_session(session_id)
+        if session is None:
+            return None
+        return session.get_summary()
+    
+
     # ========================
     # Core LLM Functionality
     # ========================
@@ -426,25 +450,42 @@ class BaseLLMModel:
         ):
             yield chunk
 
-    def get_session_history(self, session_id: str) -> Optional[List[Dict[str, str]]]:
-        """Get the chat history for a session."""
-        session = self.get_session(session_id)
-        if session is None:
-            return None
-        return session.get_history()
-    
-    def clear_session_history(self, session_id: str) -> bool:
-        """Clear the chat history for a session."""
-        session = self.get_session(session_id)
-        if session is None:
-            return False
-        session.clear_history()
-        logger.info(f"Cleared history for session {session_id}")
-        return True
-    
-    def get_session_summary(self, session_id: str) -> Optional[Dict[str, Any]]:
-        """Get summary information about a session."""
-        session = self.get_session(session_id)
-        if session is None:
-            return None
-        return session.get_summary()
+    # Stateless generation for one-off tasks such as question classification or summarization
+    # Does not affect session history
+    async def generate_stateless_response(
+        self,
+        prompt: str,
+        system_prompt: Optional[str] = None,
+        max_output_tokens: int = 100,
+        temperature: float = 0.0
+    ) -> str:
+        """
+        Generate a one-off response without session history.
+        Useful for internal tasks like classification or summarization.
+        """
+        try:
+            # Prepare config for a fast, deterministic response
+            config_params = {
+                "temperature": temperature,
+                "max_output_tokens": max_output_tokens,
+                "top_p": 0.95,
+                "top_k": 40,
+            }
+            
+            if system_prompt:
+                config_params["system_instruction"] = system_prompt
+
+            generation_config = types.GenerateContentConfig(**config_params)
+            
+            # Direct call using the client
+            response = await self.client.aio.models.generate_content(
+                model=self.model_name,
+                contents=[types.Content(role="user", parts=[types.Part.from_text(text=prompt)])],
+                config=generation_config,
+            )
+            
+            return response.text if response.text else ""
+            
+        except Exception as e:
+            logger.error(f"Error generating stateless response: {str(e)}")
+            return ""

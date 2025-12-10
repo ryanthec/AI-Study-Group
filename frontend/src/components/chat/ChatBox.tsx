@@ -1,4 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkBreaks from 'remark-breaks';
 import { Input, Button, Avatar, Typography, Space, Tag, Spin, Tooltip, AutoComplete, Divider} from 'antd';
 import {
   SendOutlined,
@@ -68,6 +70,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) 
 
   const scrollToBottom = () =>
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+
 
   // useEffect to load message history and setup WebSocket
   useEffect(() => {
@@ -249,7 +252,8 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) 
     setInputValue(value);
 
     // Get cursor position
-    const input = inputRef.current?.input;
+    const input = inputRef.current?.resizableTextArea?.textArea;
+
     if (input) {
       const pos = input.selectionStart || 0;
       setCursorPosition(pos);
@@ -269,7 +273,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) 
 
   // Handle autocomplete selection
   const handleAutocompleteSelect = (value: string) => {
-    const input = inputRef.current?.input;
+    const input = inputRef.current?.resizableTextArea?.textArea;
     if (!input) return;
 
     const pos = cursorPosition;
@@ -347,6 +351,21 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) 
     activeSocratic: '#722ed1'
   };
 
+
+  // Helper to force Markdown to respect vertical spacing
+  const preprocessContent = (content: string) => {
+    if (!content) return '';
+    
+    // 1. Replace every newline with a "hard break" (two spaces + newline)
+    let processed = content.replace(/\n/g, '  \n');
+    
+    // 2. Handle multiple consecutive empty lines
+    // Markdown collapses multiple breaks. We trick it by inserting a 
+    // Zero-Width Space (&#8203;) on empty lines so they aren't collapsed.
+    // This regex finds lines that are just whitespace/newlines and keeps them alive.
+    return processed.replace(/\n\s*\n/g, '\n\n&#8203;\n\n');
+  };
+
   // Render a single normal message
   const renderMessage = (msg: ChatMessage) => {
     const isOwn = msg.user?.id === user?.id;
@@ -407,15 +426,18 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) 
           </div>
 
           <div
+            className="chat-markdown"
             style={{
               fontSize: '15px',
               lineHeight: '1.375rem',
               color: colors.otherText,
               wordWrap: 'break-word',
-              whiteSpace: 'pre-wrap', 
+              // whiteSpace: 'pre-wrap', 
             }}
           >
-            {msg.content}
+            <ReactMarkdown remarkPlugins={[remarkBreaks]}>
+              {preprocessContent(msg.content)}
+            </ReactMarkdown>
           </div>
         </div>
       </div>
@@ -448,16 +470,19 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) 
           </div>
 
           <div
+            className="chat-markdown"
             style={{
               fontSize: '15px',
               lineHeight: '1.375rem',
               color: colors.otherText,
               wordWrap: 'break-word',
-              whiteSpace: 'pre-wrap',
+              // whiteSpace: 'pre-wrap',
               minHeight: '20px',
             }}
           >
-            {msg.content}
+            <ReactMarkdown remarkPlugins={[remarkBreaks]}>
+              {preprocessContent(msg.content)}
+            </ReactMarkdown>
             {msg.isStreaming && (
               <span
                 style={{
@@ -606,15 +631,23 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) 
             />
           </Tooltip>
           
-          <Input
+          <Input.TextArea
             ref={inputRef}
             value={inputValue}
             onChange={(e) => handleInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={!connected}
-            placeholder={`Message #${groupId} (@TeachingAI)`}
+            placeholder={`Message #${groupId} (Type @ to mention TeachingAI)`}
             variant="borderless"
-            style={{ flex: 1, background: 'transparent', color: colors.otherText, fontSize: '15px', padding: '11px 0' }}
+            autoSize={{ minRows: 1, maxRows: 3 }}
+            style={{
+              flex: 1,
+              background: 'transparent',
+              color: colors.otherText,
+              fontSize: '15px',
+              padding: '11px 0',
+              resize: 'none',
+            }}
           />
         
           <Button type="text" icon={<SendOutlined />} onClick={handleSend} disabled={!connected || !inputValue.trim()} style={{ color: inputValue.trim() ? colors.ownBubble : colors.secondaryText, padding: '4px 8px' }} />
@@ -624,6 +657,12 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) 
       <style>{`
         @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .chat-markdown p {
+          margin-bottom: 12px; /* Adds space between paragraphs */
+        }
+        .chat-markdown p:last-child {
+          margin-bottom: 0; /* Prevents extra space at the bottom of the bubble */
+        }
       `}</style>
     </div>
   );
