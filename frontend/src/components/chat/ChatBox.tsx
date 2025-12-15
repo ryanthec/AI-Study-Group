@@ -658,7 +658,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) 
         @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         .chat-markdown p {
-          margin-bottom: 12px; /* Adds space between paragraphs */
+          margin-bottom: 6px; /* Adds space between paragraphs */
         }
         .chat-markdown p:last-child {
           margin-bottom: 0; /* Prevents extra space at the bottom of the bubble */

@@ -12,7 +12,7 @@ class RAGConfig:
     include_conversations: bool = True
     top_k_documents: int = 3
     top_k_conversations: int = 3
-    similarity_threshold: float = 0.7
+    similarity_threshold: float = 0.75
     embed_conversations_first: bool = False  # If True, embed recent conversations before searching
     hours_back: int = 24  # For conversation embedding
     max_doc_chars: int = 2000  # For prompt formatting

@@ -5,9 +5,10 @@ from sqlalchemy.orm import Session
 from ...core.database import get_db
 from ...models.study_group_membership import StudyGroupMembership, MemberRole
 from ...agents.teaching_agent import RAGMode, QuestionDifficulty
+from ...services.agent_config_service import AgentConfigService
 
 # Import the shared teaching_agent and helper from chat.py
-from .chat import teaching_agent, get_user_from_token
+from .chat import get_user_from_token
 
 router = APIRouter(prefix="/agent-config", tags=["agent-config"])
 
@@ -63,15 +64,20 @@ async def get_agent_config(
     if not membership:
         raise HTTPException(status_code=403, detail="Not a member of this group")
 
-    status = teaching_agent.get_status()
+    status = AgentConfigService.get_ta_config(db, group_id)
 
     return {
-        "rag_mode": status["rag_mode"],
-        "rag_enabled": status["rag_enabled"],
-        "socratic_prompting": status["socratic_prompting"],
-        "socratic_limits": status["socratic_limits"],
-        "temperature": status["temperature"],
-        "max_tokens": status["max_tokens"],
+        "rag_mode": status.rag_mode.value,
+        "rag_enabled": status.rag_mode != RAGMode.DISABLED,
+        "socratic_prompting": status.use_socratic_prompting,
+        "temperature": status.temperature,
+        "max_tokens": status.max_output_tokens,
+        "socratic_limits": {
+            "factual": status.socratic_prompt_limit_factual,
+            "conceptual": status.socratic_prompt_limit_conceptual,
+            "applied": status.socratic_prompt_limit_applied,
+            "complex": status.socratic_prompt_limit_complex,
+        },
     }
 
 
@@ -111,7 +117,8 @@ async def update_rag_mode(
         )
 
     try:
-        teaching_agent.set_rag_mode(RAGMode[rag_mode.upper()])
+        AgentConfigService.update_config(db, group_id, {"rag_mode": rag_mode})
+        
         return {
             "status": "success",
             "message": f"RAG mode changed to {rag_mode}",
@@ -150,7 +157,8 @@ async def update_socratic_mode(
         )
 
     try:
-        teaching_agent.config.use_socratic_prompting = enabled
+        AgentConfigService.update_config(db, group_id, {"use_socratic_prompting": enabled})
+        
         return {
             "status": "success",
             "message": f"Socratic prompting {'enabled' if enabled else 'disabled'}",
@@ -193,28 +201,26 @@ async def update_socratic_limits(
 
     try:
         if factual is not None:
-            teaching_agent.set_socratic_prompt_limit(
-                QuestionDifficulty.FACTUAL, factual
-            )
+            AgentConfigService.update_config(db, group_id, {"limit_factual": factual})
         if conceptual is not None:
-            teaching_agent.set_socratic_prompt_limit(
-                QuestionDifficulty.CONCEPTUAL, conceptual
-            )
-        if applied is not None:
-            teaching_agent.set_socratic_prompt_limit(
-                QuestionDifficulty.APPLIED, applied
-            )
-        if complex is not None:
-            teaching_agent.set_socratic_prompt_limit(
-                QuestionDifficulty.COMPLEX, complex
-            )
+            AgentConfigService.update_config(db, group_id, {"limit_conceptual": conceptual})
 
-        status = teaching_agent.get_status()
+        if applied is not None:
+            AgentConfigService.update_config(db, group_id, {"limit_applied": applied})
+        if complex is not None:
+            AgentConfigService.update_config(db, group_id, {"limit_complex": complex})
+
+        status = AgentConfigService.get_ta_config(db, group_id)
 
         return {
             "status": "success",
             "message": "Socratic limits updated",
-            "socratic_limits": status["socratic_limits"],
+            "socratic_limits": {
+                "factual": status.socratic_prompt_limit_factual,
+                "conceptual": status.socratic_prompt_limit_conceptual,
+                "applied": status.socratic_prompt_limit_applied,
+                "complex": status.socratic_prompt_limit_complex,
+            },
         }
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -251,7 +257,8 @@ async def update_temperature(
         )
 
     try:
-        teaching_agent.set_temperature(temperature)
+
+        AgentConfigService.update_config(db, group_id, {"temperature": temperature})
         return {
             "status": "success",
             "message": f"Temperature updated to {temperature}",

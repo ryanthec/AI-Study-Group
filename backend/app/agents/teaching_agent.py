@@ -164,11 +164,9 @@ class TeachingAssistantAgent:
         """
         self.base_llm = base_llm
         self.rag_service = rag_service
-        self.config = config or TAConfig()
+        self.default_config = config or TAConfig()
         
-        logger.info(
-            f"Initialized TeachingAssistantAgent with RAG mode: {self.config.rag_mode.value}"
-        )
+        logger.info("Initialized TeachingAssistantAgent")
     
 
     # ========================
@@ -198,60 +196,39 @@ class TeachingAssistantAgent:
             logger.error(f"LLM classification failed: {e}")
             return QuestionDifficulty.CONCEPTUAL
 
-    async def _detect_question_difficulty(self, question: str) -> QuestionDifficulty:
+    async def _detect_question_difficulty(self, question: str, config: TAConfig) -> QuestionDifficulty:
         """
-        Detect question difficulty using Hybrid approach:
-        1. Fast Regex check for obvious signals (Code, Math).
-        2. LLM check for ambiguous/natural language questions (if enabled).
+        Detect question difficulty using Hybrid approach.
         """
         question_lower = question.lower().strip()
         
         # 1. Strong Regex Signals (Keep these as they are fast and usually correct)
-        
-        # APPLIED - Code/Math keywords are usually distinct
         applied_patterns = [
-            r'code\s+',
-            r'write\s+.*\s+function',
-            r'solve\s+',
-            r'calculate\s+',
-            r'implement\s+',
-            r'debug\s+',
-            r'fix\s+',
-            r'algorithm\s+',
-            r'error\s+',]
+            r'code\s+', r'write\s+.*\s+function', r'solve\s+', r'calculate\s+',
+            r'implement\s+', r'debug\s+', r'fix\s+', r'algorithm\s+', r'error\s+'
+        ]
         for pattern in applied_patterns:
             if re.search(pattern, question_lower):
                 return QuestionDifficulty.APPLIED
         
-        # 2. If config allows, use LLM for the rest (Factual vs Conceptual is hard for Regex)
-        if self.config.use_llm_difficulty_check:
+        # 2. If config allows, use LLM for the rest
+        # CHANGED: Use passed config instead of self.config
+        if config.use_llm_difficulty_check:
             return await self._classify_with_llm(question)
             
         # 3. Fallback to Regex if LLM check disabled
-        # COMPLEX
         complex_patterns = [
-            r'^analyze\s+',
-            r'^design\s+',
-            r'^evaluate\s+',
-            r'^what\s+would\s+happen',
-            r'^how\s+would\s+you\s+',
-            r'^suggest\s+',
-            r'^hypothesize\s+',]
+            r'^analyze\s+', r'^design\s+', r'^evaluate\s+', r'^what\s+would\s+happen',
+            r'^how\s+would\s+you\s+', r'^suggest\s+', r'^hypothesize\s+'
+        ]
         for pattern in complex_patterns:
             if re.search(pattern, question_lower):
                 return QuestionDifficulty.COMPLEX
         
-        # FACTUAL vs CONCEPTUAL (Regex is often weak here, hence LLM preference above)
         factual_patterns = [
-            r'^what\s+is\s+',
-            r'^what\s+are\s+',
-            r'^where\s+is\s+',
-            r'^when\s+did\s+',
-            r'^who\s+is\s+',
-            r'^which\s+.*\?$',
-            r'^define\s+',
-            r'^list\s+',
-            r'is\s+.*\s+the\s+',]
+            r'^what\s+is\s+', r'^what\s+are\s+', r'^where\s+is\s+', r'^when\s+did\s+',
+            r'^who\s+is\s+', r'^which\s+.*\?$', r'^define\s+', r'^list\s+', r'is\s+.*\s+the\s+'
+        ]
         for pattern in factual_patterns:
             if re.search(pattern, question_lower):
                 return QuestionDifficulty.FACTUAL
@@ -338,21 +315,13 @@ class TeachingAssistantAgent:
     #     # Default to conceptual for ambiguous questions
     #     return QuestionDifficulty.CONCEPTUAL
 
-    def _get_socratic_prompt_limit(self, difficulty: QuestionDifficulty) -> int:
-        """
-        Get the Socratic prompt limit based on question difficulty.
-        
-        Args:
-            difficulty: QuestionDifficulty enum value
-            
-        Returns:
-            Maximum number of Socratic prompts for this difficulty
-        """
+    def _get_socratic_prompt_limit(self, difficulty: QuestionDifficulty, config: TAConfig) -> int:
+        """Get the Socratic prompt limit based on question difficulty from the provided config."""
         limits = {
-            QuestionDifficulty.FACTUAL: self.config.socratic_prompt_limit_factual,
-            QuestionDifficulty.CONCEPTUAL: self.config.socratic_prompt_limit_conceptual,
-            QuestionDifficulty.APPLIED: self.config.socratic_prompt_limit_applied,
-            QuestionDifficulty.COMPLEX: self.config.socratic_prompt_limit_complex,
+            QuestionDifficulty.FACTUAL: config.socratic_prompt_limit_factual,
+            QuestionDifficulty.CONCEPTUAL: config.socratic_prompt_limit_conceptual,
+            QuestionDifficulty.APPLIED: config.socratic_prompt_limit_applied,
+            QuestionDifficulty.COMPLEX: config.socratic_prompt_limit_complex,
         }
         return limits.get(difficulty, 2)
 
@@ -396,6 +365,7 @@ class TeachingAssistantAgent:
         question: str,
         use_rag: bool = True,
         db_session=None,
+        active_config: Optional[TAConfig] = None,
         custom_temperature: Optional[float] = None,
         custom_top_p: Optional[float] = None,
         custom_top_k: Optional[float] = None,
@@ -419,16 +389,18 @@ class TeachingAssistantAgent:
         Raises:
             ValueError: If RAG is needed but not properly configured
         """
+
+        config = active_config or self.default_config
         # Detect question difficulty
-        difficulty = await self._detect_question_difficulty(question)
-        prompt_limit = self._get_socratic_prompt_limit(difficulty)
+        difficulty = await self._detect_question_difficulty(question, config)
+        prompt_limit = self._get_socratic_prompt_limit(difficulty, config)
         
         # Build adaptive system prompt
         system_prompt = self._build_adaptive_system_prompt(difficulty, prompt_limit)
 
-        # Prepare user message with optional RAG context
+       # Prepare user message with optional RAG context
         user_message = question
-        if use_rag and self.config.rag_mode != RAGMode.DISABLED:
+        if use_rag and config.rag_mode != RAGMode.DISABLED:
             if self.rag_service is None:
                 logger.warning("RAG requested but service not configured, proceeding without RAG")
             elif db_session is None:
@@ -436,15 +408,15 @@ class TeachingAssistantAgent:
             else:
                 try:
                     user_message = self._prepare_message_with_rag(
-                        question, group_id, db_session
+                        question, group_id, db_session, config
                     )
                 except Exception as e:
                     logger.error(f"RAG retrieval failed: {str(e)}, proceeding without RAG")
 
         # Generate response
-        temperature = custom_temperature or self.config.temperature
-        top_p = custom_top_p or self.config.top_p
-        top_k = custom_top_k or self.config.top_k
+        temperature = custom_temperature or config.temperature
+        top_p = custom_top_p or config.top_p
+        top_k = custom_top_k or config.top_k
 
         response = await self.base_llm.generate_response(
             session_id=session_id,
@@ -453,7 +425,7 @@ class TeachingAssistantAgent:
             temperature=temperature,
             top_p=top_p,
             top_k=top_k,
-            max_output_tokens=self.config.max_output_tokens,
+            max_output_tokens=config.max_output_tokens,
             use_chat_history=True
         )
 
@@ -466,6 +438,7 @@ class TeachingAssistantAgent:
         question: str,
         use_rag: bool = True,
         db_session=None,
+        active_config: Optional[TAConfig] = None,
         custom_temperature: Optional[float] = None,
         custom_top_p: Optional[float] = None,
         custom_top_k: Optional[float] = None,
@@ -491,16 +464,20 @@ class TeachingAssistantAgent:
         Raises:
             ValueError: If RAG is needed but not properly configured
         """
+
+        # Determine configuration to use
+        config = active_config or self.default_config
+
         # Detect question difficulty
-        difficulty = await self._detect_question_difficulty(question)
-        prompt_limit = self._get_socratic_prompt_limit(difficulty)
+        difficulty = await self._detect_question_difficulty(question, config)
+        prompt_limit = self._get_socratic_prompt_limit(difficulty, config)
         
         # Build adaptive system prompt
         system_prompt = self._build_adaptive_system_prompt(difficulty, prompt_limit)
 
         # Prepare user message with optional RAG context
         user_message = question
-        if use_rag and self.config.rag_mode != RAGMode.DISABLED:
+        if use_rag and config.rag_mode != RAGMode.DISABLED:
             if self.rag_service is None:
                 logger.warning("RAG requested but service not configured, proceeding without RAG")
             elif db_session is None:
@@ -508,15 +485,15 @@ class TeachingAssistantAgent:
             else:
                 try:
                     user_message = self._prepare_message_with_rag(
-                        question, group_id, db_session
+                        question, group_id, db_session, config
                     )
                 except Exception as e:
                     logger.error(f"RAG retrieval failed: {str(e)}, proceeding without RAG")
 
         # Generate response
-        temperature = custom_temperature or self.config.temperature
-        top_p = custom_top_p or self.config.top_p
-        top_k = custom_top_k or self.config.top_k
+        temperature = custom_temperature or config.temperature
+        top_p = custom_top_p or config.top_p
+        top_k = custom_top_k or config.top_k
 
         async for chunk in self.base_llm.generate_response_stream(
             session_id=session_id,
@@ -525,7 +502,7 @@ class TeachingAssistantAgent:
             temperature=temperature,
             top_p=top_p,
             top_k=top_k,
-            max_output_tokens=self.config.max_output_tokens,
+            max_output_tokens=config.max_output_tokens,
             use_chat_history=True
         ):
             yield chunk
@@ -534,26 +511,18 @@ class TeachingAssistantAgent:
         self,
         question: str,
         group_id: int,
-        db_session
+        db_session,
+        config: TAConfig
     ) -> str:
-        """
-        Retrieve relevant context using RAG and prepare enhanced message.
-
-        Args:
-            question: Original question
-            group_id: Study group ID
-            db_session: Database session
-
-        Returns:
-            Question with RAG context prepended
-        """
-        # Configure RAG based on agent config
+        """Retrieve relevant context using RAG and prepare enhanced message."""
+        
+        # Configure RAG based on the provided agent config
         rag_config = RAGConfig(
             include_documents=(
-                self.config.rag_mode in [RAGMode.DOCUMENTS_ONLY, RAGMode.BOTH]
+                config.rag_mode in [RAGMode.DOCUMENTS_ONLY, RAGMode.BOTH]
             ),
             include_conversations=(
-                self.config.rag_mode in [RAGMode.CONVERSATIONS_ONLY, RAGMode.BOTH]
+                config.rag_mode in [RAGMode.CONVERSATIONS_ONLY, RAGMode.BOTH]
             ),
             top_k_documents=3,
             top_k_conversations=3
@@ -573,84 +542,22 @@ class TeachingAssistantAgent:
             config=rag_config
         )
 
-        # Prepare enhanced message
+        # Prepare enhanced message with Defensive Prompting
         enhanced_message = (
-            f"Based on study materials:\n{formatted_context}\n\n"
+            f"SYSTEM: I have automatically retrieved the following study materials for you. "
+            f"Please EVALUATE their relevance to the student's question:\n"
+            f"1. If the materials contain the answer, use them and cite them.\n"
+            f"2. If the materials are IRRELEVANT (e.g., matched on keywords but wrong topic), "
+            f"IGNORE them completely and answer based on your general knowledge.\n"
+            f"3. Do NOT force a connection if none exists.\n\n"
+            f"--- RETRIEVED MATERIALS ---\n"
+            f"{formatted_context}\n"
+            f"--- END MATERIALS ---\n\n"
             f"Student Question: {question}"
         )
-
+        
         return enhanced_message
-    
-    # ========================
-    # Configuration Management
-    # ========================
-    
-    def set_socratic_prompt_limit(
-        self,
-        difficulty: QuestionDifficulty,
-        limit: int
-    ) -> None:
-        """
-        Set Socratic prompt limit for a specific difficulty level.
-        
-        Args:
-            difficulty: QuestionDifficulty enum
-            limit: Maximum number of Socratic prompts (0-5 recommended)
-        """
-        if not 0 <= limit <= 5:
-            raise ValueError("Socratic prompt limit must be between 0 and 5")
-        
-        limits = {
-            QuestionDifficulty.FACTUAL: "socratic_prompt_limit_factual",
-            QuestionDifficulty.CONCEPTUAL: "socratic_prompt_limit_conceptual",
-            QuestionDifficulty.APPLIED: "socratic_prompt_limit_applied",
-            QuestionDifficulty.COMPLEX: "socratic_prompt_limit_complex",
-        }
-        
-        attr = limits[difficulty]
-        setattr(self.config, attr, limit)
-        logger.info(f"Socratic prompt limit for {difficulty.value} set to {limit}")
 
-    def set_rag_mode(self, rag_mode: RAGMode) -> None:
-        """
-        Change RAG mode for the agent.
-
-        Args:
-            rag_mode: New RAG mode (DISABLED, DOCUMENTS_ONLY, CONVERSATIONS_ONLY, or BOTH)
-        """
-        self.config.rag_mode = rag_mode
-        logger.info(f"RAG mode changed to: {rag_mode.value}")
-
-    def enable_rag(self) -> None:
-        """Enable RAG with documents only."""
-        self.set_rag_mode(RAGMode.DOCUMENTS_ONLY)
-
-    def disable_rag(self) -> None:
-        """Disable RAG."""
-        self.set_rag_mode(RAGMode.DISABLED)
-
-    def is_rag_enabled(self) -> bool:
-        """Check if RAG is currently enabled."""
-        return self.config.rag_mode != RAGMode.DISABLED
-
-    def set_temperature(self, temperature: float) -> None:
-        """Set default temperature for responses."""
-        if not 0 <= temperature <= 2:
-            raise ValueError("Temperature must be between 0 and 2")
-        self.config.temperature = temperature
-        logger.info(f"Temperature set to: {temperature}")
-
-    def set_max_tokens(self, max_tokens: int) -> None:
-        """Set maximum tokens for responses."""
-        if max_tokens < 1:
-            raise ValueError("max_tokens must be at least 1")
-        self.config.max_output_tokens = max_tokens
-        logger.info(f"Max tokens set to: {max_tokens}")
-
-    def get_config(self) -> TAConfig:
-        """Get current agent configuration."""
-        return self.config
-    
     # ========================
     # Session Management (delegated to BaseLLMModel)
     # ========================
@@ -693,24 +600,3 @@ class TeachingAssistantAgent:
     def list_group_sessions(self, group_id: int) -> List:
         """List all sessions for a study group."""
         return self.base_llm.list_sessions(group_id=group_id)
-    
-    # ========================
-    # Utility Methods
-    # ========================
-    
-    def get_status(self) -> Dict[str, Any]:
-        """Get current agent status and configuration."""
-        return {
-            "rag_enabled": self.is_rag_enabled(),
-            "rag_mode": self.config.rag_mode.value,
-            "socratic_prompting": self.config.use_socratic_prompting,
-            "temperature": self.config.temperature,
-            "max_tokens": self.config.max_output_tokens,
-            "socratic_limits": {
-                "factual": self.config.socratic_prompt_limit_factual,
-                "conceptual": self.config.socratic_prompt_limit_conceptual,
-                "applied": self.config.socratic_prompt_limit_applied,
-                "complex": self.config.socratic_prompt_limit_complex,
-            },
-            "active_sessions": len(self.base_llm.sessions)
-        }

@@ -10,6 +10,8 @@ from ...core.database import get_db
 from ...core.websocket_manager import manager
 from ...services.message_service import MessageService
 from ...services.study_group_service import StudyGroupService
+from ...services.rag_service import rag_service
+from ...services.agent_config_service import AgentConfigService
 from ...config import settings
 
 # Models
@@ -24,21 +26,23 @@ from ...agents.base_llm_model import BaseLLMModel
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
-# Initialize Teaching Agent (singleton for all groups)
+# 1. Singleton LLM Client (Keeps connections/session cache efficient)
 base_llm = BaseLLMModel()
-teaching_agent = TeachingAssistantAgent(
-    base_llm=base_llm,
-    rag_service=None,  # Add RAG later after RAG toggle is implemented
-    config=TAConfig(
-        rag_mode=RAGMode.DISABLED,
-        use_socratic_prompting=True,
-        temperature=0.7,
-        socratic_prompt_limit_factual=1,
-        socratic_prompt_limit_conceptual=2,
-        socratic_prompt_limit_applied=2,
-        socratic_prompt_limit_complex=3,
+
+# 2. Factory to create TeachingAssistantAgent instances
+def get_agent_for_group(group_id: int, db: Session) -> TeachingAssistantAgent:
+    """
+    Factory: Creates Agent instance using DB configuration.
+    """
+    # Fetch config from DB
+    config = AgentConfigService.get_ta_config(db, group_id)
+    
+    # Create Agent
+    return TeachingAssistantAgent(
+        base_llm=base_llm,
+        rag_service=rag_service,
+        config=config # Pass the DB-loaded config
     )
-)
 
 
 def get_user_from_token(token: str, db: Session) -> User | None:
@@ -66,6 +70,9 @@ def remove_ai_mention(content: str) -> str:
 async def stream_ai_response(websocket: WebSocket, group_id: int, user_message: str, username: str, db: Session):
     """Stream AI response through WebSocket"""
     try:
+
+        teaching_agent = get_agent_for_group(group_id, db)
+
         # Get or create session for this group
         session_id = f"group_{group_id}"
         if not teaching_agent.base_llm.get_session(session_id):
@@ -87,13 +94,16 @@ async def stream_ai_response(websocket: WebSocket, group_id: int, user_message: 
         # Stream AI response
         full_response = []
 
-        # Get the async generator
+        # Get the config explicitly for the 'active_config' parameter
+        active_config = AgentConfigService.get_ta_config(db, group_id)
+
         stream_generator = teaching_agent.answer_question_stream(
             session_id=session_id,
             group_id=group_id,
             question=clean_question,
-            use_rag=False, #Update later when RAG is implemented
-            db_session=None
+            use_rag=True,
+            db_session=db,
+            active_config=active_config # Pass the config here
         )
         
         # Use async for to iterate
