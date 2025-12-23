@@ -1,4 +1,5 @@
-from sqlalchemy import Column, String, DateTime, Boolean, Text, JSON
+from sqlalchemy import Column, String, DateTime, Boolean, Text, JSON, Integer
+from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 import uuid
@@ -20,6 +21,10 @@ class User(Base):
     preferences = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    quizzes_completed = Column(Integer, default=0)
+
+    created_quizzes = relationship("Quiz", back_populates="creator")
+    quiz_attempts = relationship("QuizAttempt", back_populates="user")
 
     def to_dict(self):
         return {
@@ -35,4 +40,5 @@ class User(Base):
             "preferences": self.preferences,
             "createdAt": self.created_at.isoformat() if self.created_at else None,
             "updatedAt": self.updated_at.isoformat() if self.updated_at else None,
+            "quizzesCompleted": self.quizzes_completed,
         }

@@ -14,6 +14,7 @@ import { GroupDetailsTab } from '../../components/studyGroup/GroupDetailsTab';
 import { AgentSettingsTab } from '../../components/studyGroup/AgentSettingsTab';
 import { ChatTab } from '../../components/studyGroup/ChatTab';
 import { DocumentsTab } from '../../components/studyGroup/DocumentsTab';
+import { QuizTab } from '../../components/studyGroup/QuizTab';
 
 
 // Types and hooks
@@ -32,7 +33,7 @@ export const GroupDetailPage: React.FC = () => {
   const { groupId } = useParams<{ groupId: string }>();
   const [group, setGroup] = useState<StudyGroup | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'details' | 'chat' | 'documents' | 'agent settings'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'chat' | 'documents' | 'agent settings' | 'quizzes'>('details');
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
   const [members, setMembers] = useState<any[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
@@ -151,6 +152,9 @@ export const GroupDetailPage: React.FC = () => {
             isAdmin={group?.is_admin || false}
           />
         );
+      case 'quizzes':
+        return <QuizTab groupId={Number(groupId)} />;
+        
       case 'details':
       default:
         return (

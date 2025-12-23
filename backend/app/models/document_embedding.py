@@ -1,5 +1,5 @@
 # app/models/document_embedding.py
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Index
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Index, LargeBinary
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from datetime import datetime
@@ -15,10 +15,12 @@ class Document(Base):
     group_id = Column(Integer, ForeignKey("study_groups.id"), nullable=False)
     uploader_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     filename = Column(String, nullable=False)
-    file_type = Column(String, nullable=False)  # pdf, txt, etc
-    file_size = Column(Integer)  # bytes
+    file_type = Column(String, nullable=False)
+    file_size = Column(Integer) 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
+    file_data = Column(LargeBinary, nullable=True)
+
     # Relationships
     group = relationship("StudyGroup", back_populates="documents")
     uploader = relationship("User")

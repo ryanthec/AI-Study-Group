@@ -80,16 +80,16 @@ async def upload_document(
     
     # Read file content
     try:
-        content = await file.read()
+        file_bytes = await file.read()
         
-        if len(content) > MAX_FILE_SIZE:
+        if len(file_bytes) > MAX_FILE_SIZE:
             raise HTTPException(
                 status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                 detail=f"File size exceeds {MAX_FILE_SIZE // (1024*1024)}MB limit"
             )
         
         # Extract text from file
-        text_content = extract_text_from_file(content, file.filename)
+        text_content = extract_text_from_file(file_bytes, file.filename)
         
         if not text_content or len(text_content.strip()) == 0:
             raise HTTPException(
@@ -105,7 +105,8 @@ async def upload_document(
             filename=file.filename,
             file_type=extension.lstrip('.'),
             text_content=text_content,
-            file_size=len(content)
+            file_size=len(file_bytes),
+            file_bytes=file_bytes
         )
         
         return {
@@ -216,3 +217,45 @@ async def delete_document(
         )
     
     return {"message": "Document deleted successfully"}
+
+# Get single document
+@router.get("/{document_id}/group/{group_id}")
+async def get_document(
+    document_id: int,
+    group_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Get a specific document's metadata"""
+    
+    # Check membership
+    membership = db.query(StudyGroupMembership).filter(
+        StudyGroupMembership.group_id == group_id,
+        StudyGroupMembership.user_id == current_user.id,
+        StudyGroupMembership.is_active == True
+    ).first()
+    
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not a member of this study group"
+        )
+
+    document = DocumentService.get_document_by_id(db, document_id, group_id)
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Document not found"
+        )
+        
+    return {
+        "id": document.id,
+        "filename": document.filename,
+        "file_type": document.file_type,
+        "file_size": document.file_size,
+        "created_at": document.created_at.isoformat(),
+        "uploader": {
+            "id": str(document.uploader.id),
+            "username": document.uploader.username
+        }
+    }

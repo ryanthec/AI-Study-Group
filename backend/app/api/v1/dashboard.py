@@ -25,16 +25,15 @@ async def get_dashboard_stats(
         StudyGroup.status == StudyGroupStatus.ACTIVE
     ).count()
 
-    # TODO Change this to Quizzes completed when that feature is implemented
-    sessions_completed = ProgressService.get_sessions_completed(db, current_user.id)
+    quizzes_completed = current_user.quizzes_completed
 
     return {
         "total_groups": total_groups,
         "groups_created": groups_created,
-        "sessions_completed": sessions_completed,
+        "quizzes_completed": quizzes_completed,
     }
 
-
+# Method not used for now but can be used in the future (When I want to check how many modules users have completed)
 @router.post("/sessions/increment")
 async def increment_sessions_completed(
     db: Session = Depends(get_db),

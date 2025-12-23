@@ -37,6 +37,7 @@ class StudyGroup(Base):
     invitations = relationship("GroupInvitation", back_populates="group", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="group", cascade="all, delete-orphan")
     agent_config = relationship("GroupAgentConfig", uselist=False, back_populates="group", cascade="all, delete-orphan")
+    quizzes = relationship("Quiz", back_populates="group", cascade="all, delete-orphan")
 
     def to_dict(self):
         return {

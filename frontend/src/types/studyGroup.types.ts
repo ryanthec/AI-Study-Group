@@ -37,5 +37,6 @@ export interface StudyGroupListResponse {
 export interface StudyGroupStats {
   total_groups: number;
   groups_created: number;
-  sessions_completed: number;
+  quizzes_completed: number;
+  // sessions_completed: number;
 }

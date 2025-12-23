@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 from typing import List, Optional
 import os
 from pathlib import Path
@@ -49,6 +49,7 @@ class DocumentService:
         filename: str,
         file_type: str,
         text_content: str,
+        file_bytes: bytes,
         file_size: int = 0,
         chunk_size: int = 2000,
         overlap: int = 400
@@ -58,17 +59,18 @@ class DocumentService:
         
         This is a single operation - no file storage needed!
         """
-        # Create document record (metadata only)
+        # Create document record
         document = Document(
             group_id=group_id,
             uploader_id=uploader_id,
             filename=filename,
             file_type=file_type,
             file_size=file_size,
+            file_data=file_bytes,
             created_at=datetime.utcnow()
         )
         db.add(document)
-        db.flush()  # Get document.id without committing
+        db.flush()
         
         # Split into chunks
         chunks = DocumentService.chunk_text(text_content, chunk_size, overlap)
@@ -140,11 +142,12 @@ class DocumentService:
 
 
     @staticmethod
-    def get_group_documents(db: Session, group_id: int) -> List[Document]:
-        """Get all documents for a study group"""
-        return db.query(Document).filter(
+    def get_group_documents(db: Session, group_id: int):
+        # We use defer('file_data') so we don't load the heavy PDF bytes 
+        # when just listing files in the UI.
+        return db.query(Document).options(defer(Document.file_data)).filter(
             Document.group_id == group_id
-        ).order_by(Document.created_at.desc()).all()
+        ).all()
 
     @staticmethod
     def get_document_by_id(db: Session, document_id: int, group_id: int) -> Optional[Document]:
@@ -153,3 +156,4 @@ class DocumentService:
             Document.id == document_id,
             Document.group_id == group_id
         ).first()
+    

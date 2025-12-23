@@ -1,4 +1,5 @@
 import os
+import io
 from typing import Optional, List, Dict, Any, Iterator, AsyncIterator
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -202,30 +203,76 @@ class BaseLLMModel:
     # ========================
     # Core LLM Functionality
     # ========================
-    
+
+    # Helper to upload files from as an attachment in model API calls
+    def upload_file_from_bytes(self, file_bytes: bytes, mime_type: str, display_name: str = "attachment") -> types.File:
+        """
+        Uploads raw bytes as a temporary file to Google GenAI.
+        Used for attaching PDFs/DOCXs directly to the model context.
+        """
+        try:
+            # Create a file-like object from bytes
+            file_io = io.BytesIO(file_bytes)
+            
+            # Upload to Google
+            file_upload = self.client.files.upload(
+                file=file_io,
+                config=types.UploadFileConfig(
+                    display_name=display_name,
+                    mime_type=mime_type
+                )
+            )
+            logger.info(f"Uploaded file {display_name} ({mime_type}) with URI {file_upload.uri}")
+            return file_upload
+        except Exception as e:
+            logger.error(f"Failed to upload file bytes: {str(e)}")
+            raise RuntimeError(f"File upload failed: {str(e)}")
+        
     # Helper to build contents from session history
     def build_contents_for_session(
         self,
         session: ChatSession,
         user_message: str,
-        use_chat_history: bool
+        use_chat_history: bool,
+        attachments: Optional[List[types.File]] = None
     ) -> list[types.Content]:
         contents: list[types.Content] = []
-        if use_chat_history and len(session.chat_history) > 1:
+        
+        # 1. Add Chat History (if enabled)
+        if use_chat_history and len(session.chat_history) > 0:
             for msg in session.chat_history:
                 role = msg["role"]
                 text = msg["content"]
-                if role == "user":
-                    contents.append(types.Content(role="user", parts=[types.Part.from_text(text=text)]))
-                elif role == "assistant":
-                    contents.append(types.Content(role="model", parts=[types.Part.from_text(text=text)]))
-        else:
-            contents = [
-                types.Content(
-                    role="user",
-                    parts=[types.Part.from_text(text=user_message)]
+                # Map 'assistant' to 'model' for the API
+                api_role = "model" if role == "assistant" else "user"
+                
+                # History usually just has text, but you could expand this if you save file references in history
+                contents.append(types.Content(role=api_role, parts=[types.Part.from_text(text=text)]))
+
+        # 2. Build the Current Message Parts
+        current_message_parts = []
+
+        # A. Add Attachments First (if any)
+        if attachments:
+            for file_ref in attachments:
+                current_message_parts.append(
+                    types.Part.from_uri(
+                        file_uri=file_ref.uri,
+                        mime_type=file_ref.mime_type
+                    )
                 )
-            ]
+
+        # B. Add User Text
+        current_message_parts.append(types.Part.from_text(text=user_message))
+
+        # 3. Append to Contents
+        contents.append(
+            types.Content(
+                role="user",
+                parts=current_message_parts
+            )
+        )
+        
         return contents
     
     async def generate_response(
@@ -238,7 +285,8 @@ class BaseLLMModel:
         top_k: Optional[float] = None,
         max_output_tokens: Optional[int] = 2048,
         timeout: Optional[int] = None,
-        use_chat_history: bool = True
+        use_chat_history: bool = True,
+        attachments: Optional[List[types.File]] = None
     ) -> str:
         """
         Generate a response from the LLM.
@@ -270,7 +318,8 @@ class BaseLLMModel:
             contents = self.build_contents_for_session(
                 session=session,
                 user_message=user_message,
-                use_chat_history=use_chat_history
+                use_chat_history=use_chat_history,
+                attachments=attachments,
             )
             
             # Prepare generation config
@@ -323,6 +372,7 @@ class BaseLLMModel:
         top_k: Optional[float] = None,
         max_output_tokens: Optional[int] = 2048,
         timeout: Optional[int] = None,
+        attachments: Optional[List[types.File]] = None,
     ) -> str:
         """
         Generate a response with additional context (useful for RAG).
@@ -350,7 +400,8 @@ class BaseLLMModel:
             top_k=top_k,
             timeout=timeout,
             max_output_tokens=max_output_tokens,
-            use_chat_history=True
+            use_chat_history=True,
+            attachments=attachments,
         )
     
     async def generate_response_stream(
@@ -362,7 +413,9 @@ class BaseLLMModel:
         top_p: Optional[float] = None,
         top_k: Optional[float] = None,
         max_output_tokens: Optional[int] = 2048,
-        use_chat_history: bool = True
+        use_chat_history: bool = True,
+        attachments: Optional[List[types.File]] = None
+        
     ) -> AsyncIterator[str]:
         """
         Stream a response as text deltas; at stream end, save the full assistant reply in chat history.
@@ -378,7 +431,8 @@ class BaseLLMModel:
         contents = self.build_contents_for_session(
             session=session,
             user_message=user_message,
-            use_chat_history=use_chat_history
+            use_chat_history=use_chat_history,
+            attachments=attachments,
         )
 
         # Build generation config
@@ -432,7 +486,9 @@ class BaseLLMModel:
         top_p: Optional[float] = None,
         top_k: Optional[float] = None,
         max_output_tokens: Optional[int] = 2048,
-        use_chat_history: bool = True
+        use_chat_history: bool = True,
+        attachments: Optional[List[types.File]] = None,
+
     ) -> AsyncIterator[str]:
         """
         Stream a response with additional prefixed context; saves final answer to history on completion.
@@ -447,8 +503,11 @@ class BaseLLMModel:
             top_k=top_k,
             max_output_tokens=max_output_tokens,
             use_chat_history=use_chat_history,
+            attachments=attachments,
         ):
             yield chunk
+
+
 
     # Stateless generation for one-off tasks such as question classification or summarization
     # Does not affect session history
@@ -457,14 +516,33 @@ class BaseLLMModel:
         prompt: str,
         system_prompt: Optional[str] = None,
         max_output_tokens: int = 100,
-        temperature: float = 0.0
+        temperature: float = 0.0,
+        attachments: Optional[List[types.File]] = None,
     ) -> str:
         """
         Generate a one-off response without session history.
         Useful for internal tasks like classification or summarization.
         """
         try:
-            # Prepare config for a fast, deterministic response
+            # 1. Build Content Parts (Files + Text)
+            message_parts = []
+            
+            # Add Attachments first if they exist
+            if attachments:
+                for file_ref in attachments:
+                    message_parts.append(
+                        types.Part.from_uri(
+                            file_uri=file_ref.uri,
+                            mime_type=file_ref.mime_type
+                        )
+                    )
+            
+            # Add the text prompt
+            message_parts.append(types.Part.from_text(text=prompt))
+            
+            contents = [types.Content(role="user", parts=message_parts)]
+
+            # 2. Prepare Config
             config_params = {
                 "temperature": temperature,
                 "max_output_tokens": max_output_tokens,
@@ -477,10 +555,10 @@ class BaseLLMModel:
 
             generation_config = types.GenerateContentConfig(**config_params)
             
-            # Direct call using the client
+            # 3. Call Model (Stateless)
             response = await self.client.aio.models.generate_content(
                 model=self.model_name,
-                contents=[types.Content(role="user", parts=[types.Part.from_text(text=prompt)])],
+                contents=contents,
                 config=generation_config,
             )
             
@@ -488,4 +566,5 @@ class BaseLLMModel:
             
         except Exception as e:
             logger.error(f"Error generating stateless response: {str(e)}")
-            return ""
+            # Re-raise so the caller (Quiz Agent) knows it failed
+            raise RuntimeError(f"Stateless generation failed: {str(e)}")

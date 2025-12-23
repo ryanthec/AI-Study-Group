@@ -20,7 +20,7 @@ export const DashboardPage: React.FC = () => {
   const [stats, setStats] = useState<StudyGroupStats>({
     total_groups: 0,
     groups_created: 0,
-    sessions_completed: 0,
+    quizzes_completed: 0,
   });
   const [recentGroups, setRecentGroups] = useState<StudyGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -106,8 +106,8 @@ export const DashboardPage: React.FC = () => {
           <Col xs={24} sm={8}>
             <Card style={cardStyle} loading={loading}>
               <Statistic
-                title="Sessions Completed"
-                value={stats.sessions_completed}
+                title="Quizzes Completed"
+                value={stats.quizzes_completed}
                 prefix={<TrophyOutlined />}
                 valueStyle={{ color: '#faad14' }}
               />
