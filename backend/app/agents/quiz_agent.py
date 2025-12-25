@@ -8,6 +8,7 @@ from ..models.document_embedding import Document
 
 logger = logging.getLogger(__name__)
 
+# --- UPDATED PROMPT ---
 QUIZ_SYSTEM_PROMPT = """You are an expert educational content creator. 
 Your task is to generate high-quality multiple-choice quizzes based on the attached document(s).
 
@@ -15,11 +16,28 @@ OUTPUT FORMAT:
 Return a valid JSON object with a key "questions" containing a list of objects.
 Each object must have:
 - "question": The question text.
-- "options": An array of 4 distinct strings (A, B, C, D).
-- "correct_answer": The index (0-3) or the string value of the correct option.
+- "options": An array of exactly 4 distinct string answers.
+- "correct_answer": The exact string value of the correct option (must match one of the strings in the options array exactly).
 - "explanation": A brief explanation of why the answer is correct.
 
 Do not include markdown formatting (like ```json) in the response, just the raw JSON string.
+
+### JSON EXAMPLE:
+{
+  "questions": [
+    {
+      "question": "What is the powerhouse of the cell?",
+      "options": [
+        "A. The Nucleus",
+        "B. The Mitochondria",
+        "C. The Ribosome",
+        "D. The Chloroplast"
+      ],
+      "correct_answer": "B. The Mitochondria",
+      "explanation": "Mitochondria are known as the powerhouse of the cell because they generate most of the cell's supply of adenosine triphosphate (ATP)."
+    }
+  ]
+}
 """
 
 class QuizGeneratorAgent:
@@ -30,13 +48,14 @@ class QuizGeneratorAgent:
         mime, _ = mimetypes.guess_type(filename)
         if mime:
             return mime
+        # Fallback
         if filename.endswith(".pdf"): return "application/pdf"
         if filename.endswith(".docx"): return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         return "text/plain"
 
     async def generate_quiz(
         self, 
-        session_id: str, # Kept for compatibility, but unused
+        session_id: str, 
         document_ids: List[int], 
         topic_prompt: str, 
         num_questions: int, 
@@ -69,7 +88,7 @@ class QuizGeneratorAgent:
         doc_list_str = ", ".join(doc_names) if doc_names else "provided context"
         
         user_message = f"""
-        Generate a quiz with {num_questions} questions.
+        Generate a quiz with {num_questions} multiple choice questions.
         
         User Topic/Focus: {topic_prompt}
         

@@ -19,9 +19,11 @@ import { documentService, Document } from '../../services/document.service';
 import { QuizAttemptView } from './QuizAttemptView';
 import { QuizResultView } from './QuizResultView';
 import { useAuth } from '../../hooks/useAuth';
+import { useTheme } from '../../hooks/useTheme';
 
 export const QuizTab: React.FC<{ groupId: number }> = ({ groupId }) => {
   const { user } = useAuth();
+  const { isDark } = useTheme();
   
   // --- View State ---
   const [viewMode, setViewMode] = useState<'dashboard' | 'attempt' | 'result'>('dashboard');
@@ -41,6 +43,14 @@ export const QuizTab: React.FC<{ groupId: number }> = ({ groupId }) => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   
   const [createForm] = Form.useForm();
+
+  // --- COLOR THEMES ---
+  const colors = {
+    primary: isDark ? '#722ed1' : '#1890ff', // Dark Purple vs Blue
+    text: isDark ? '#e6e6e6' : '#000000',
+    textSecondary: isDark ? '#a6a6a6' : '#666666',
+    modalBg: isDark ? '#1f1f1f' : '#ffffff',
+  };
 
   useEffect(() => {
     if (groupId) {
@@ -158,8 +168,8 @@ export const QuizTab: React.FC<{ groupId: number }> = ({ groupId }) => {
       key: 'title',
       render: (text, record) => (
         <div>
-          <div style={{ fontWeight: 500 }}>{text}</div>
-          <div style={{ fontSize: '12px', color: '#666' }}>{record.description}</div>
+          <div style={{ fontWeight: 500, color: colors.text }}>{text}</div>
+          <div style={{ fontSize: '12px', color: colors.textSecondary }}>{record.description || "No description"}</div>
         </div>
       ),
     },
@@ -168,7 +178,7 @@ export const QuizTab: React.FC<{ groupId: number }> = ({ groupId }) => {
       dataIndex: 'num_questions',
       key: 'num_questions',
       width: 100,
-      render: (count) => <Tag>{count}</Tag>,
+      render: (count) => <Tag color={isDark ? 'purple' : 'default'}>{count}</Tag>,
     },
     {
       title: 'Status',
@@ -176,7 +186,7 @@ export const QuizTab: React.FC<{ groupId: number }> = ({ groupId }) => {
       width: 150,
       render: (_, record) => {
         if (!record.latest_attempt) {
-          return <Tag icon={<MinusCircleOutlined />}>Not Attempted</Tag>;
+          return <Tag icon={<MinusCircleOutlined />} style={{ color: colors.textSecondary }}>Not Attempted</Tag>;
         }
         const { score, total_questions, passed } = record.latest_attempt;
         return (
@@ -198,6 +208,7 @@ export const QuizTab: React.FC<{ groupId: number }> = ({ groupId }) => {
           <Button 
             type="primary" 
             size="small"
+            style={{ background: colors.primary, borderColor: colors.primary }}
             icon={<RocketOutlined />} 
             onClick={() => startAttempt(record)}
           >
@@ -211,7 +222,7 @@ export const QuizTab: React.FC<{ groupId: number }> = ({ groupId }) => {
                 disabled={!record.latest_attempt}
                 onClick={() => viewPastResults(record)}
             >
-                View Results
+                Results
             </Button>
           </Tooltip>
 
@@ -229,7 +240,7 @@ export const QuizTab: React.FC<{ groupId: number }> = ({ groupId }) => {
     },
   ];
 
-  // --- RENDERERS ---
+  // --- Views ---
 
   if (viewMode === 'attempt' && activeQuiz) {
       return (
@@ -258,10 +269,16 @@ export const QuizTab: React.FC<{ groupId: number }> = ({ groupId }) => {
     <div style={{ padding: '24px', maxWidth: '1200px', margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '24px', alignItems: 'center' }}>
         <div>
-            <h2 style={{ margin: 0 }}>Quizzes</h2>
-            <span style={{ color: '#666' }}>Generate AI quizzes from your study materials</span>
+            <h2 style={{ margin: 0, color: colors.text }}>Quizzes</h2>
+            <span style={{ color: colors.textSecondary }}>Generate AI quizzes from your study materials</span>
         </div>
-        <Button type="primary" size="large" icon={<PlusOutlined />} onClick={() => setIsCreateModalOpen(true)}>
+        <Button 
+            type="primary" 
+            size="large" 
+            icon={<PlusOutlined />} 
+            style={{ background: colors.primary, borderColor: colors.primary }}
+            onClick={() => setIsCreateModalOpen(true)}
+        >
           Create Quiz
         </Button>
       </div>
@@ -276,23 +293,24 @@ export const QuizTab: React.FC<{ groupId: number }> = ({ groupId }) => {
 
       {/* Creation Modal */}
       <Modal
-        title="Generate New AI Quiz"
+        title={<span style={{ color: colors.text }}>Generate New AI Quiz</span>}
         open={isCreateModalOpen}
         onCancel={() => !isCreating && setIsCreateModalOpen(false)}
         footer={null}
         width={600}
         maskClosable={!isCreating}
+        styles={{ body: { background: colors.modalBg }, content: { background: colors.modalBg } }}
       >
         <Form form={createForm} layout="vertical" onFinish={handleCreate}>
-            <Form.Item name="title" label="Quiz Title" rules={[{ required: true }]}>
+            <Form.Item name="title" label={<span style={{ color: colors.text }}>Quiz Title</span>} rules={[{ required: true }]}>
                 <Input placeholder="e.g., Midterm Revision" />
             </Form.Item>
             
-            <Form.Item name="topic_prompt" label="Topic / Focus Area" rules={[{ required: true }]}>
+            <Form.Item name="topic_prompt" label={<span style={{ color: colors.text }}>Topic / Focus Area</span>} rules={[{ required: true }]}>
                 <Input.TextArea rows={3} placeholder="Focus on..." />
             </Form.Item>
 
-            <Form.Item name="document_ids" label="Source Documents">
+            <Form.Item name="document_ids" label={<span style={{ color: colors.text }}>Source Documents</span>}>
                 <Select mode="multiple" placeholder="Select documents (optional)">
                     {documents.map(doc => (
                         <Select.Option key={doc.id} value={doc.id}>{doc.filename}</Select.Option>
@@ -301,10 +319,10 @@ export const QuizTab: React.FC<{ groupId: number }> = ({ groupId }) => {
             </Form.Item>
 
             <div style={{ display: 'flex', gap: '16px' }}>
-                <Form.Item name="num_questions" label="Questions" initialValue={10} style={{ flex: 1 }}>
+                <Form.Item name="num_questions" label={<span style={{ color: colors.text }}>Questions</span>} initialValue={10} style={{ flex: 1 }}>
                     <InputNumber min={5} max={20} style={{ width: '100%' }} />
                 </Form.Item>
-                <Form.Item name="scope" label="Visibility" initialValue="group" style={{ flex: 1 }}>
+                <Form.Item name="scope" label={<span style={{ color: colors.text }}>Visibility</span>} initialValue="group" style={{ flex: 1 }}>
                     <Radio.Group style={{ width: '100%', display: 'flex' }}>
                         <Radio.Button value="group" style={{ flex: 1, textAlign: 'center' }}>Group</Radio.Button>
                         <Radio.Button value="personal" style={{ flex: 1, textAlign: 'center' }}>Private</Radio.Button>
@@ -312,7 +330,14 @@ export const QuizTab: React.FC<{ groupId: number }> = ({ groupId }) => {
                 </Form.Item>
             </div>
 
-            <Button type="primary" htmlType="submit" loading={isCreating} block size="large">
+            <Button 
+                type="primary" 
+                htmlType="submit" 
+                loading={isCreating} 
+                block 
+                size="large"
+                style={{ background: colors.primary, borderColor: colors.primary, marginTop: '16px' }}
+            >
                 Generate Quiz
             </Button>
         </Form>
