@@ -1,5 +1,5 @@
 import React from 'react';
-import { Menu, Layout, Button, Space, Tooltip, Badge } from 'antd';
+import { Menu, Layout, Button, Space, Tooltip, Badge, List, Avatar, Typography } from 'antd';
 import {
   BarsOutlined,
   MessageOutlined,
@@ -12,6 +12,7 @@ import {
   CrownOutlined,
   RobotOutlined,
   FormOutlined,
+  TeamOutlined,
 } from '@ant-design/icons';
 import type { StudyGroup } from '../../types/studyGroup.types';
 import { useTheme } from '../../hooks/useTheme';
@@ -26,7 +27,7 @@ interface StudyGroupSidebarProps {
   onDelete?: () => void;
   onLeave?: () => void;
   onBackToGroups?: () => void;
-  onlineMembers?: number;
+  onlineUsers?: any[];
 }
 
 export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
@@ -38,9 +39,10 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
   onDelete,
   onLeave,
   onBackToGroups,
-  onlineMembers = 0,
+  onlineUsers = [],
 }) => {
   const { isDark } = useTheme();
+  const { Text } = Typography;
 
   const sidebarStyle: React.CSSProperties = {
     background: isDark ? '#1f1f1f' : '#fff',
@@ -59,10 +61,68 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
 
   // Colors for borders and backgrounds
   const borderColor = isDark ? '#434343' : '#9fa1a3ff';
-  const textSecondaryColor = isDark ? '#a6a6a6' : '#666';
   const actionsBackground = isDark ? '#141414' : '#fafafa';
+  const headerBackground = isDark ? '#141414' : '#fff';
+
+  // Popup specific colors
+  const popupColors = {
+    bg: isDark ? '#1f1f1f' : '#ffffff',
+    text: isDark ? '#e6e6e6' : '#262626',
+    border: isDark ? '#434343' : '#f0f0f0',
+    secondaryText: isDark ? '#a6a6a6' : '#999999',
+    hoverBg: isDark ? '#262626' : '#f6f6f6',
+    hoverText: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.85)',
+  };
 
   if (!group) return null;
+
+
+  const onlineCount = onlineUsers.length;
+
+  // (User List)
+  const onlineUsersList = (
+    <div style={{ maxHeight: '300px', overflowY: 'auto', minWidth: '220px' }}>
+      <div 
+        style={{ 
+          padding: '10px 16px', 
+          borderBottom: `1px solid ${popupColors.border}`, 
+          marginBottom: '4px' 
+        }}
+      >
+        <Text strong style={{ color: popupColors.text }}>
+          Online Members ({onlineCount})
+        </Text>
+      </div>
+      
+      {onlineCount === 0 ? (
+        <div style={{ padding: '16px', color: popupColors.secondaryText, textAlign: 'center' }}>
+          No one else is online
+        </div>
+      ) : (
+        <List
+          size="small"
+          dataSource={onlineUsers}
+          split={false}
+          renderItem={(user: any) => (
+            <List.Item style={{ padding: '8px 16px' }}>
+              <Space>
+                <Avatar 
+                  src={user.avatar} 
+                  size="small"
+                  style={{ backgroundColor: '#1890ff', verticalAlign: 'middle' }}
+                >
+                  {user.firstName?.[0]?.toUpperCase() || user.username?.[0]?.toUpperCase()}
+                </Avatar>
+                <Text style={{ color: popupColors.text }}>
+                  {user.username}
+                </Text>
+              </Space>
+            </List.Item>
+          )}
+        />
+      )}
+    </div>
+  );
 
   const menuItems = [
     {
@@ -123,26 +183,48 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
         style={{
           padding: '16px',
           borderBottom: `1px solid ${borderColor}`,
+          background: headerBackground,
         }}
       >
-        <h3 style={{ margin: '0 0 8px 0', wordBreak: 'break-word' }}>
+        <h3 style={{ margin: '0 0 8px 0', wordBreak: 'break-word', fontSize: '18px', color: popupColors.text }}>
           {group.name}
         </h3>
-        <Badge
-          count={onlineMembers}
-          showZero
-          color="#52c41a"
-          style={{ backgroundColor: '#52c41a' }}
-        />
-        <span
-          style={{
-            marginLeft: '8px',
-            fontSize: '12px',
-            color: textSecondaryColor,
-          }}
+        
+        {/* The Hoverable Area */}
+        <Tooltip 
+            title={onlineUsersList} 
+            placement="bottomLeft" 
+            color={popupColors.bg} 
+            trigger={['hover', 'click']}
+            styles={{ body: { 
+              padding: 0, 
+              borderRadius: '8px', 
+              boxShadow: '0 3px 6px -4px rgba(0,0,0,0.12), 0 6px 16px 0 rgba(0,0,0,0.08), 0 9px 28px 8px rgba(0,0,0,0.05)',
+              background: popupColors.bg,
+              } 
+            }}
         >
-          {onlineMembers} online
-        </span>
+            <div style={{ 
+                display: 'inline-flex', 
+                alignItems: 'center', 
+                cursor: 'pointer', 
+                padding: '6px 10px', 
+                borderRadius: '6px',
+                background: isDark ? 'rgba(255,255,255,0.08)' : '#f0f0f0',
+                transition: 'all 0.3s',
+                userSelect: 'none'
+            }}>
+                <Badge status="success" style={{ marginRight: 8 }} />
+                <span style={{ 
+                    fontSize: '13px', 
+                    color: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.85)', 
+                    fontWeight: 500 
+                }}>
+                    {onlineCount} Online
+                </span>
+                <TeamOutlined style={{ marginLeft: 8, color: popupColors.secondaryText, fontSize: '12px' }} />
+            </div>
+        </Tooltip>
       </div>
 
       {/* Navigation Menu */}

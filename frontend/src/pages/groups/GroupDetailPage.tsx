@@ -37,12 +37,12 @@ export const GroupDetailPage: React.FC = () => {
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
   const [members, setMembers] = useState<any[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
-  const [onlineMembers, setOnlineMembers] = useState(0);
+  const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
 
   useEffect(() => {
     if (groupId) {
       loadGroup();
-      loadMembers();
+      // loadMembers();
     }
   }, [groupId]);
 
@@ -60,33 +60,33 @@ export const GroupDetailPage: React.FC = () => {
     }
   };
 
-  const loadMembers = async () => {
-    try {
-      setMembersLoading(true);
-      const membersList = await studyGroupService.getGroupMembers(Number(groupId));
-      setMembers(membersList);
-      // Count online members
-      const onlineCount = membersList.filter((m: any) => m.isOnline).length;
-      setOnlineMembers(onlineCount);
-    } catch (error) {
-      console.log('Could not load members', error);
-    } finally {
-      setMembersLoading(false);
-    }
-  };
+  // const loadMembers = async () => {
+  //   try {
+  //     setMembersLoading(true);
+  //     const membersList = await studyGroupService.getGroupMembers(Number(groupId));
+  //     setMembers(membersList);
+  //     // Count online members
+  //     const onlineCount = membersList.filter((m: any) => m.isOnline).length;
+  //     setOnlineMembers(onlineCount);
+  //   } catch (error) {
+  //     console.log('Could not load members', error);
+  //   } finally {
+  //     setMembersLoading(false);
+  //   }
+  // };
 
    // Silent refresh without showing loading spinner
-  const loadMembersQuietly = async () => {
-    try {
-      const membersList = await studyGroupService.getGroupMembers(Number(groupId));
-      setMembers(membersList);
-      const onlineCount = membersList.filter((m: any) => m.isOnline).length;
-      setOnlineMembers(onlineCount);
-    } catch (error) {
-      // Silently fail - don't show error to user
-      console.log('Background member refresh failed', error);
-    }
-  };
+  // const loadMembersQuietly = async () => {
+  //   try {
+  //     const membersList = await studyGroupService.getGroupMembers(Number(groupId));
+  //     setMembers(membersList);
+  //     const onlineCount = membersList.filter((m: any) => m.isOnline).length;
+  //     setOnlineMembers(onlineCount);
+  //   } catch (error) {
+  //     // Silently fail - don't show error to user
+  //     console.log('Background member refresh failed', error);
+  //   }
+  // };
 
   const handleLeave = () => {
     Modal.confirm({
@@ -136,7 +136,11 @@ export const GroupDetailPage: React.FC = () => {
   const renderContent = () => {
     switch (activeTab) {
       case 'chat':
-        return <ChatTab groupId={Number(groupId) } onUserCountUpdate={(count) => setOnlineMembers(count)} />;
+        return <ChatTab 
+            groupId={Number(groupId)} 
+            // Receive the list from ChatBox -> ChatTab -> Here
+            onOnlineUsersUpdate={(users) => setOnlineUsers(users)} 
+          />;
       case 'documents':
         return (
           <DocumentsTab
@@ -185,7 +189,7 @@ export const GroupDetailPage: React.FC = () => {
           onDelete={handleDelete}
           onLeave={handleLeave}
           onBackToGroups={handleBackToGroups}
-          onlineMembers={onlineMembers}
+          onlineUsers={onlineUsers}
         />
       )}
 
@@ -222,7 +226,7 @@ export const GroupDetailPage: React.FC = () => {
           groupId={Number(groupId)}
           onClose={() => setInviteModalVisible(false)}
           onSuccess={() => {
-            loadMembers();
+            // loadMembers();
             setInviteModalVisible(false);
           }}
         />

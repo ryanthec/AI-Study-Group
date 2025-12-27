@@ -177,18 +177,18 @@ async def websocket_endpoint(websocket: WebSocket, group_id: int, db: Session = 
         await websocket.close(code=1008, reason="Not a member")
         return
     
-    # Mark user as online
-    StudyGroupService.mark_user_online(group_id, user.id)
+    # # Mark user as online
+    # StudyGroupService.mark_user_online(group_id, user.id)
     
     # Register connection
-    await manager.register(websocket, group_id)
+    await manager.register(websocket, group_id, user)
     
-    # System join message
-    join = MessageService.create_message(
-        db=db, group_id=group_id, user_id=None,
-        content=f"{user.username} joined the chat", message_type=MessageType.SYSTEM
-    )
-    await manager.broadcast_to_group(MessageService.format_message_for_ws(join, db), group_id)
+    # # System join message
+    # join = MessageService.create_message(
+    #     db=db, group_id=group_id, user_id=None,
+    #     content=f"{user.username} joined the chat", message_type=MessageType.SYSTEM
+    # )
+    # await manager.broadcast_to_group(MessageService.format_message_for_ws(join, db), group_id)
     
     try:
         while True:
@@ -230,13 +230,13 @@ async def websocket_endpoint(websocket: WebSocket, group_id: int, db: Session = 
     
     finally:
         manager.disconnect(websocket, group_id)
-        leave = MessageService.create_message(
-            db=db, group_id=group_id, user_id=None,
-            content=f"{user.username} left the chat", message_type=MessageType.SYSTEM
-        )
-        StudyGroupService.mark_user_offline(group_id, user.id)
-        await manager.broadcast_to_group(MessageService.format_message_for_ws(leave, db), group_id)
-        await manager.broadcast_user_count(group_id)
+        # leave = MessageService.create_message(
+        #     db=db, group_id=group_id, user_id=None,
+        #     content=f"{user.username} left the chat", message_type=MessageType.SYSTEM
+        # )
+        # StudyGroupService.mark_user_offline(group_id, user.id)
+        # await manager.broadcast_to_group(MessageService.format_message_for_ws(leave, db), group_id)
+        await manager.broadcast_online_users(group_id)
 
 
 @router.get("/{group_id}/messages")

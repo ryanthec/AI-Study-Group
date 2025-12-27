@@ -24,7 +24,7 @@ const { Text } = Typography;
 
 interface ChatBoxProps {
   groupId: number;
-  onUserCountUpdate?: (count: number) => void;
+  onOnlineUsersUpdate?: (users: any[]) => void;
 }
 
 interface StreamingMessage {
@@ -34,7 +34,7 @@ interface StreamingMessage {
   isStreaming: boolean;
 }
 
-export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) => {
+export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }) => {
   const { user } = useAuth();
   const { isDark } = useTheme();
 
@@ -108,9 +108,11 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onUserCountUpdate }) 
         try {
           const data = JSON.parse(e.data);
           
-          // Handle user count updates
-          if (data.type === 'user_count_update') {
-            onUserCountUpdate?.(data.count);
+          if (data.type === 'online_users_update') {
+            // Pass the list of users to the parent
+            if (onOnlineUsersUpdate) {
+              onOnlineUsersUpdate(data.users);
+            }
             return;
           }
 

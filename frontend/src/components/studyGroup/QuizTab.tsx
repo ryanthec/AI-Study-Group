@@ -299,7 +299,7 @@ export const QuizTab: React.FC<{ groupId: number }> = ({ groupId }) => {
         footer={null}
         width={600}
         maskClosable={!isCreating}
-        styles={{ body: { background: colors.modalBg }, content: { background: colors.modalBg } }}
+        styles={{ header: { background: colors.modalBg }, body: { background: colors.modalBg }, content: { background: colors.modalBg } }}
       >
         <Form form={createForm} layout="vertical" onFinish={handleCreate}>
             <Form.Item name="title" label={<span style={{ color: colors.text }}>Quiz Title</span>} rules={[{ required: true }]}>

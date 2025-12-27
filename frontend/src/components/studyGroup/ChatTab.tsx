@@ -5,10 +5,10 @@ import { useTheme } from '../../hooks/useTheme';
 
 interface ChatTabProps {
   groupId: number;
-  onUserCountUpdate?: (count: number) => void;
+  onOnlineUsersUpdate?: (users: any[]) => void;
 }
 
-export const ChatTab: React.FC<ChatTabProps> = ({ groupId, onUserCountUpdate }) => {
+export const ChatTab: React.FC<ChatTabProps> = ({ groupId, onOnlineUsersUpdate }) => {
   const { isDark } = useTheme();
 
   return (
@@ -37,7 +37,7 @@ export const ChatTab: React.FC<ChatTabProps> = ({ groupId, onUserCountUpdate }) 
           flexDirection: 'column',
           overflow: 'hidden',}}}
       >
-        <ChatBox groupId={groupId} onUserCountUpdate={onUserCountUpdate} />
+        <ChatBox groupId={groupId} onOnlineUsersUpdate={onOnlineUsersUpdate} />
       </Card>
     </div>
   );
