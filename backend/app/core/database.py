@@ -56,7 +56,7 @@ def create_tables():
 
         _import_all_models()
 
-        reset = os.getenv("RESET_DB_ON_STARTUP", "true").lower() == "true"
+        reset = os.getenv("RESET_DB_ON_STARTUP", "false").lower() == "true"
         if reset:
             print("⚠️  RESET_DB_ON_STARTUP is enabled — dropping all tables...")
             Base.metadata.drop_all(bind=engine)
