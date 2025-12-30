@@ -1,0 +1,77 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: ai-study-group-db
+    environment:
+      POSTGRES_DB: ai_study_group
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/db/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - ai-study-group-network
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    container_name: ai-study-group-redis
+    volumes:
+      - redis_data:/data
+    networks:
+      - ai-study-group-network
+    restart: always
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: ai-study-group-backend
+    environment:
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/ai_study_group
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - ENVIRONMENT=production
+      # Important: Allow the frontend to talk to backend
+      - CORS_ORIGINS=["http://<YOUR_DROPLET_IP>","http://localhost"]
+    volumes:
+      - backend_uploads:/app/uploads
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - ai-study-group-network
+    restart: always
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    container_name: ai-study-group-frontend
+    networks:
+      - ai-study-group-network
+    restart: always
+
+  # Main Entry Point (Reverse Proxy)
+  nginx-proxy:
+    image: nginx:alpine
+    container_name: main-proxy
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/prod.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - frontend
+      - backend
+    networks:
+      - ai-study-group-network
+    restart: always
+
+volumes:
+  postgres_data:
+  redis_data:
+  backend_uploads:
+
+networks:
+  ai-study-group-network:
+    driver: bridge
