@@ -165,7 +165,7 @@ export const DashboardPage: React.FC = () => {
                           {group.description || 'No description'}
                         </Text>
                         <Space size="small">
-                          {group.subject && <Tag>{group.subject}</Tag>}
+                          {group.module && <Tag>{group.module}</Tag>}
                           <Text type="secondary" style={{ fontSize: '12px' }}>
                             {group.member_count}/{group.max_members} members
                           </Text>

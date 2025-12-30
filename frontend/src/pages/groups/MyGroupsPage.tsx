@@ -131,7 +131,7 @@ export const MyGroupsPage: React.FC = () => {
                         <Space direction="vertical" size={4}>
                           <Text type="secondary">{group.description || 'No description'}</Text>
                           <Space size={12}>
-                            {group.subject && <Tag>{group.subject}</Tag>}
+                            {group.module && <Tag>{group.module}</Tag>}
                             <Text type="secondary">
                               {group.member_count}/{group.max_members} members
                             </Text>

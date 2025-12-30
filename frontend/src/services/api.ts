@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import axios, { AxiosResponse, AxiosError } from 'axios';
 import toast from 'react-hot-toast';
 
@@ -60,11 +61,11 @@ api.interceptors.response.use(
     }
 
     // Handle other errors
-    if (error.response?.status >= 500) {
+    if (error.response && error.response.status >= 500) {
       toast.error('Server error. Please try again later.');
-    } else if (error.response?.status === 404) {
+    } else if (error.response && error.response.status === 404) {
       toast.error('Resource not found.');
-    } else if (error.response?.status === 403) {
+    } else if (error.response && error.response.status === 403) {
       toast.error('Access denied.');
     }
 
