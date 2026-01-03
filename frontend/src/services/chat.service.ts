@@ -29,7 +29,8 @@ export const chatService = {
   // Create WebSocket connection
   connectWebSocket: (groupId: number): WebSocket => {
     const token = localStorage.getItem('access_token') || '';
-    const url = `ws://localhost:8000/api/v1/chat/ws/${groupId}?token=${encodeURIComponent(token)}`;
+    const url = `${WS_HOST}/api/v1/chat/ws/${groupId}?token=${encodeURIComponent(token)}`;
+    console.log('Here is my WS_HOST:', WS_HOST);
     console.log('WS URL:', url);
     return new WebSocket(url);
   },

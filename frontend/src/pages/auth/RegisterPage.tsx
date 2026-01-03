@@ -22,7 +22,7 @@ const cardStyle: React.CSSProperties = {
 export const RegisterPage: React.FC = () => {
   return (
     <div style={pageStyle}>
-      <Card style={cardStyle} bodyStyle={{ padding: 32 }}>
+      <Card style={cardStyle} styles={{ body: { padding: 32 } }}>
         <RegisterForm onSwitchToLogin={() => (window.location.href = '/login')} />
       </Card>
     </div>

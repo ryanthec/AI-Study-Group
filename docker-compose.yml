@@ -88,7 +88,7 @@ services:
     container_name: ai-study-group-frontend
     environment:
       - VITE_API_URL=http://localhost:8000/api/v1
-      - VITE_WS_URL=ws://localhost:8000/ws
+      - VITE_WS_URL=ws://localhost:8000
       - VITE_APP_NAME=AI Study Group
     ports:
       - "3000:5173"
