@@ -1,15 +1,17 @@
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import os
+import requests
 from typing import Optional
 
 class EmailService:
     def __init__(self):
-        self.smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-        self.smtp_port = int(os.getenv("SMTP_PORT", "587"))
-        self.sender_email = os.getenv("SMTP_SENDER")
-        self.sender_password = os.getenv("SMTP_PASSWORD")
+        # We replace SMTP credentials with Brevo API configuration
+        self.api_url = "https://api.brevo.com/v3/smtp/email"
+        self.api_key = os.getenv("BREVO_API_KEY", "")
+        
+        # Sender info needs to be a valid verified sender in Brevo
+        self.sender_email = os.getenv("SMTP_SENDER", "noreply@yourdomain.com") 
+        self.sender_name = os.getenv("SENDER_NAME", "AI Study Group App")
+        
         self.frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
     def send_invitation_email(
@@ -19,12 +21,12 @@ class EmailService:
         group_name: str,
         token: str
     ) -> bool:
-        """Send study group invitation email"""
+        """Send study group invitation email via Brevo API"""
         try:
             invitation_link = f"{self.frontend_url}/invitations/accept?token={token}"
-            
             subject = f"{inviter_name} invited you to join '{group_name}' study group"
             
+            # The HTML body remains exactly the same as your design
             html_body = f"""
             <html>
                 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
@@ -54,22 +56,37 @@ class EmailService:
             </html>
             """
             
-            message = MIMEMultipart("alternative")
-            message["Subject"] = subject
-            message["From"] = self.sender_email
-            message["To"] = invitee_email
+            # Construct the JSON payload for Brevo
+            payload = {
+                "sender": {
+                    "name": self.sender_name,
+                    "email": self.sender_email
+                },
+                "to": [
+                    {
+                        "email": invitee_email
+                    }
+                ],
+                "subject": subject,
+                "htmlContent": html_body
+            }
             
-            html_part = MIMEText(html_body, "html")
-            message.attach(html_part)
+            headers = {
+                "accept": "application/json",
+                "api-key": self.api_key,
+                "content-type": "application/json"
+            }
+
+            # Send the request
+            response = requests.post(self.api_url, json=payload, headers=headers)
             
-            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
-                server.ehlo()
-                server.starttls()
-                server.ehlo()
-                server.login(self.sender_email, self.sender_password)
-                server.sendmail(self.sender_email, invitee_email, message.as_string())
-            
-            return True
+            # Check for success (201 Created is typical for Brevo, but 200-299 is safe)
+            if 200 <= response.status_code < 300:
+                return True
+            else:
+                print(f"Failed to send email. Status: {response.status_code}, Response: {response.text}")
+                return False
+
         except Exception as e:
             print(f"Failed to send invitation email: {e}")
             return False
