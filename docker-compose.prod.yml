@@ -27,13 +27,15 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: ai-study-group-backend
+    env_file:
+    - .env
     environment:
       - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/ai_study_group
       - REDIS_URL=redis://redis:6379/0
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - ENVIRONMENT=production
       # Important: Allow the frontend to talk to backend
-      - CORS_ORIGINS=["http://<YOUR_DROPLET_IP>","http://localhost"]
+      - CORS_ORIGINS=["http://167.71.217.164","http://localhost"]
     volumes:
       - backend_uploads:/app/uploads
     depends_on:
