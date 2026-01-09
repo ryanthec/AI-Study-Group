@@ -17,6 +17,8 @@ import { DocumentsTab } from '../../components/studyGroup/DocumentsTab';
 import { QuizTab } from '../../components/studyGroup/QuizTab';
 
 
+import { VoiceChatProvider } from '../../context/VoiceChatContext';
+
 // Types and hooks
 import type { StudyGroup } from '../../types/studyGroup.types';
 import { useAuth } from '../../hooks/useAuth';
@@ -177,6 +179,12 @@ export const GroupDetailPage: React.FC = () => {
     <>
       <Navbar />
 
+      <VoiceChatProvider 
+        groupId={groupId!} 
+        userId={user?.id || ''} 
+        userName={user?.username || 'User'}
+      >
+
       {/* Sidebar Navigation */}
       {!loading && group && (
         <StudyGroupSidebar
@@ -231,6 +239,7 @@ export const GroupDetailPage: React.FC = () => {
           }}
         />
       )}
+      </VoiceChatProvider>
     </>
   );
 };

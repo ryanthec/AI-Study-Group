@@ -6,7 +6,7 @@ import os
 
 from .core.database import engine, create_tables
 from .config import settings
-from .api.v1 import auth, study_groups, dashboard, chat, invitations, documents, users, agent_config, quizzes
+from .api.v1 import auth, study_groups, dashboard, chat, invitations, documents, users, agent_config, quizzes, voice_chat
 from .models import user
 
 # Create tables on startup
@@ -53,6 +53,7 @@ app.include_router(invitations.router, prefix="/api/v1")
 app.include_router(documents.router, prefix="/api/v1")
 app.include_router(agent_config.router, prefix="/api/v1")
 app.include_router(quizzes.router, prefix="/api/v1")
+app.include_router(voice_chat.router, prefix="/api/v1")
 
 
 # Root endpoint

@@ -77,3 +77,11 @@ volumes:
 networks:
   ai-study-group-network:
     driver: bridge
+
+
+
+# To deploy on production server, use:
+# docker-compose -f docker-compose.prod.yml up -d --build
+
+# To reset database, use:
+# docker-compose -f docker-compose.prod.yml down -v

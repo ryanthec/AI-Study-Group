@@ -16,6 +16,7 @@ import {
 } from '@ant-design/icons';
 import type { StudyGroup } from '../../types/studyGroup.types';
 import { useTheme } from '../../hooks/useTheme';
+import { VoiceSidebarSection } from './VoiceSidebarSection';
 
 interface StudyGroupSidebarProps {
   groupId: number;
@@ -51,7 +52,6 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
       ? '1px 0 4px rgba(0, 0, 0, 0.45)'
       : '1px 0 4px rgba(0, 0, 0, 0.15)',
     height: 'calc(100vh - 64px)',
-    overflow: 'auto',
     position: 'fixed',
     left: 0,
     top: 64,
@@ -61,7 +61,7 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
 
   // Colors for borders and backgrounds
   const borderColor = isDark ? '#434343' : '#9fa1a3ff';
-  const actionsBackground = isDark ? '#141414' : '#fafafa';
+  const actionsBackground = isDark ? '#141414' : '#f5f5f5d8';
   const headerBackground = isDark ? '#141414' : '#fff';
 
   // Popup specific colors
@@ -227,16 +227,28 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
         </Tooltip>
       </div>
 
-      {/* Navigation Menu */}
-      <Menu
-        mode="vertical"
-        selectedKeys={[activeTab]}
-        items={menuItems}
-        style={{
-          borderRight: 'none',
-          background: 'transparent',
-        }}
-      />
+      <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
+        
+        {/* Navigation Menu */}
+        <Menu
+          mode="vertical"
+          selectedKeys={[activeTab]}
+          items={menuItems}
+          style={{
+            borderRight: 'none',
+            background: 'transparent',
+          }}
+        />
+      </div>
+      
+      {/* Voice Section Area */}
+      <div style={{ 
+          borderTop: `1px solid ${borderColor}`, 
+          background: actionsBackground, 
+          padding: '0 0 8px 0' // Padding handled inside component or here
+      }}>
+        <VoiceSidebarSection />
+      </div>
 
       {/* Admin/User Actions */}
       <div
