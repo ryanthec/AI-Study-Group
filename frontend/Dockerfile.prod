@@ -4,6 +4,16 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
+
+
+# Accept the build argument
+ARG VITE_API_URL
+ARG VITE_WS_URL
+
+# Set them as environment variables so Vite can see them during build
+ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_WS_URL=$VITE_WS_URL
+
 # This builds the app into the /app/dist folder
 RUN npm run build 
 
