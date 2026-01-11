@@ -53,7 +53,7 @@ services:
       dockerfile: Dockerfile.prod
       args:
         - VITE_API_URL=https://aistudyhub.app/api/v1
-        - VITE_WS_URL=wss://aistudyhub.app/api/v1/voice/ws
+        - VITE_WS_URL=wss://aistudyhub.app
     container_name: ai-study-group-frontend
     networks:
       - ai-study-group-network
