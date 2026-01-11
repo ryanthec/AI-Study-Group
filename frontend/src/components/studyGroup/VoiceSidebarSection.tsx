@@ -121,7 +121,8 @@ export const VoiceSidebarSection = () => {
                 split={false}
                 locale={{ emptyText: 'No one here' }}
                 renderItem={(user) => {
-                    const isSelf = user.userId === currentUser.id;
+                    const uid = user.userId;
+                    const isSelf = uid === currentUser.id;
                     return (
                         <List.Item 
                             style={{ 
