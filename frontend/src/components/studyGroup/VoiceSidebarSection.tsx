@@ -121,8 +121,7 @@ export const VoiceSidebarSection = () => {
                 split={false}
                 locale={{ emptyText: 'No one here' }}
                 renderItem={(user) => {
-                    const uid = user.userId;
-                    const isSelf = uid === currentUser.id;
+                    const isSelf = user.userId === currentUser.id;
                     return (
                         <List.Item 
                             style={{ 
@@ -133,7 +132,7 @@ export const VoiceSidebarSection = () => {
                                 transition: 'background 0.2s'
                             }}
                             className="voice-user-item"
-                            onContextMenu={(e) => handleRightClick(e, uid)}
+                            onContextMenu={(e) => handleRightClick(e, user.userId)}
                             // Add hover effect via inline style or class
                             onMouseEnter={(e) => { e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.05)' }}
                             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}

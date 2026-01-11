@@ -29,24 +29,9 @@ class ConnectionManager:
 
     async def broadcast_to_others(self, message: dict, group_id: str, sender_id: str):
         if group_id in self.active_connections:
-            # Create a list of failed users to remove after the loop
-            # (We cannot delete from dict while iterating)
-            failed_users = []
-
             for user_id, user_data in self.active_connections[group_id].items():
                 if user_id != sender_id:
-                    try:
-                        # 👇 CRITICAL FIX: Try/Except block
-                        await user_data['socket'].send_text(json.dumps(message))
-                    except Exception:
-                        # If sending fails, mark user for removal
-                        failed_users.append(user_id)
-
-            # Clean up zombie connections
-            for uid in failed_users:
-                self.disconnect(group_id, uid)
-                # Optional: Notify others that this zombie user "left"
-                # await self.broadcast_to_others({"type": "user-left", "userId": uid}, group_id, uid)
+                    await user_data['socket'].send_text(json.dumps(message))
     
     # Return objects with ID and Name instead of just ID strings
     def get_active_users(self, group_id: str) -> List[Dict[str, str]]:

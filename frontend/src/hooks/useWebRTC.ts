@@ -97,6 +97,14 @@ export const useWebRTC = (roomId: string, userId: string, userName: string, webs
                 const newUsers = others.filter(u => !existingIds.has(u.userId));
                 return [...prev, ...newUsers];
             });
+            
+            // Create peer connections for existing users
+            const existingUsers = data.users as VoiceUser[];
+            for (const user of existingUsers) {
+                await createPeerConnection(user.userId, true);
+            }
+            return;
+        }
 
         const senderId = data.userId;
         if (senderId === userId) return;
@@ -133,7 +141,6 @@ export const useWebRTC = (roomId: string, userId: string, userName: string, webs
                 await handleIceCandidate(senderId, data.candidate);
                 break;
         }
-      };
     };
   };
 

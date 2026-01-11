@@ -21,11 +21,23 @@ export default defineConfig({
     port: 3000,
     host: true,
     proxy: {
+      // Voice WebSocket - must be before /api to take precedence
+      '/api/v1/voice/ws': {
+        target: 'ws://backend:8000',
+        ws: true,
+        changeOrigin: true,
+      },
+      // Chat WebSocket
+      '/api/v1/chat/ws': {
+        target: 'ws://backend:8000',
+        ws: true,
+        changeOrigin: true,
+      },
+      // General API requests
       '/api': {
         target: 'http://backend:8000',
         changeOrigin: true,
         secure: false,
-        ws: true,
       },
       '/ws': {
         target: 'ws://backend:8000',
