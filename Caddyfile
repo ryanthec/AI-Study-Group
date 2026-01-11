@@ -1,0 +1,17 @@
+aistudyhub.app {
+    # 1. Handle API requests (forward to backend container)
+    handle_path /api/* {
+        reverse_proxy backend:8000
+    }
+
+    # 2. Handle WebSocket requests (forward to backend)
+    # Caddy handles the "Upgrade" headers automatically!
+    handle_path /ws/* {
+        reverse_proxy backend:8000
+    }
+
+    # 3. Serve the Frontend (forward to frontend container)
+    handle {
+        reverse_proxy frontend:80
+    }
+}

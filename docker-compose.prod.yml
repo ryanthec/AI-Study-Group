@@ -35,7 +35,7 @@ services:
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - ENVIRONMENT=production
       # Important: Allow the frontend to talk to backend
-      - CORS_ORIGINS=["http://167.71.217.164","http://localhost"]
+      - CORS_ORIGINS=["http://167.71.217.164","http://localhost", "https://aistudyhub.app"]
     volumes:
       - backend_uploads:/app/uploads
     depends_on:
@@ -44,6 +44,8 @@ services:
     networks:
       - ai-study-group-network
     restart: always
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+    
 
   frontend:
     build:
@@ -55,24 +57,29 @@ services:
     restart: always
 
   # Main Entry Point (Reverse Proxy)
-  nginx-proxy:
-    image: nginx:alpine
-    container_name: main-proxy
+  caddy:
+    image: caddy:latest
+    container_name: ai-study-group-caddy
+    restart: always
     ports:
       - "80:80"
+      - "443:443"
     volumes:
-      - ./nginx/prod.conf:/etc/nginx/conf.d/default.conf
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
     depends_on:
       - frontend
       - backend
     networks:
       - ai-study-group-network
-    restart: always
 
 volumes:
   postgres_data:
   redis_data:
   backend_uploads:
+  caddy_data:   # Persist SSL certificates
+  caddy_config: # Persist Caddy config
 
 networks:
   ai-study-group-network:
