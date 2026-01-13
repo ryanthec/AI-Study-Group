@@ -146,7 +146,7 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
     {
       key: 'agent settings',
       icon: <RobotOutlined />,
-      label: 'Agent Settings',
+      label: 'Configure AI',
       onClick: () => onTabChange('agent settings'),
     },
     {

@@ -129,7 +129,7 @@ export const AgentSettingsTab: React.FC<AgentSettingsTabProps> = ({
             }
           : null
       );
-      message.success(`Temperature updated to ${value.toFixed(2)}`);
+      // message.success(`Temperature updated to ${value.toFixed(2)}`);
     } catch (error: any) {
       message.error(error.response?.data?.detail || 'Failed to update temperature');
     } finally {
@@ -171,13 +171,13 @@ export const AgentSettingsTab: React.FC<AgentSettingsTabProps> = ({
         {/* RAG Settings */}
         <Card style={cardStyle}>
           <Space direction="vertical" style={{ width: '100%' }} size="middle">
-            <Title level={4}>📚 RAG (Retrieval-Augmented Generation)</Title>
+            <Title level={4}>📚 Study Material Access</Title>
             <Text>
               Enable the AI to reference study materials and previous conversations for better context.
             </Text>
 
             <div>
-              <Text strong>RAG Mode:</Text>
+              <Text strong>AI Document Access:</Text>
               <Select
                 style={{ width: '100%', marginTop: '8px' }}
                 value={config.rag_mode}
@@ -206,7 +206,7 @@ export const AgentSettingsTab: React.FC<AgentSettingsTabProps> = ({
         {/* Socratic Prompting Settings */}
         <Card style={cardStyle}>
           <Space direction="vertical" style={{ width: '100%' }} size="middle">
-            <Title level={4}>🤔 Socratic Prompting</Title>
+            <Title level={4}>🤔 Teaching Style</Title>
             <Text>
               Guide students through learning with thoughtful questions based on question type.
             </Text>
@@ -222,7 +222,7 @@ export const AgentSettingsTab: React.FC<AgentSettingsTabProps> = ({
                 borderRadius: '6px',
               }}
             >
-              <Text strong>Enable Socratic Prompting:</Text>
+              <Text strong>Enable Leaning Mode:</Text>
               <Switch
                 checked={config.socratic_prompting}
                 onChange={handleSocraticModeChange}
@@ -233,7 +233,7 @@ export const AgentSettingsTab: React.FC<AgentSettingsTabProps> = ({
             {config.socratic_prompting && (
               <>
                 <Divider />
-                <Text strong>Prompt Limits by Question Type:</Text>
+                <Text strong>Teaching Style by Question Type:</Text>
 
                 {/* Factual Questions */}
                 <div>
@@ -388,7 +388,7 @@ export const AgentSettingsTab: React.FC<AgentSettingsTabProps> = ({
             <div>
               <Row justify="space-between" align="middle">
                 <Col>
-                  <Text strong>Temperature:</Text>
+                  <Text strong>Response Creativity:</Text>
                 </Col>
                 <Col>
                   <Tag color="magenta">{config.temperature.toFixed(2)}</Tag>
