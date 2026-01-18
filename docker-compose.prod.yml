@@ -91,7 +91,7 @@ networks:
 
 
 # To deploy on production server, use:
-# docker-compose -f docker-compose.prod.yml up -d --build
+# docker compose -f docker-compose.prod.yml up --build
 
 # To reset database, use:
-# docker-compose -f docker-compose.prod.yml down -v
+# docker compose -f docker-compose.prod.yml down -v

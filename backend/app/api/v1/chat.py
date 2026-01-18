@@ -180,7 +180,7 @@ async def websocket_endpoint(websocket: WebSocket, group_id: int, db: Session = 
     # # Mark user as online
     # StudyGroupService.mark_user_online(group_id, user.id)
     
-    # Register connection
+    # Register connection (adds to active_connections but doesn't broadcast yet)
     await manager.register(websocket, group_id, user)
     
     # # System join message
@@ -198,6 +198,15 @@ async def websocket_endpoint(websocket: WebSocket, group_id: int, db: Session = 
                 break
             
             payload = json.loads(text)
+            
+            # Handle client ready signal - client is ready to receive messages
+            if payload.get("type") == "client_ready":
+                # Now that client is ready, send them the online users list
+                await manager.send_online_users_to_socket(websocket, group_id)
+                # And notify other users about the new connection
+                await manager.broadcast_online_users_to_others(group_id, websocket)
+                continue
+            
             content = payload.get("content", "").strip()
             
             if not content:
