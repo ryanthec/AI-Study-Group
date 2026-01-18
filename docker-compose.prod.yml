@@ -34,6 +34,7 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - JWT_SECRET_KEY=${JWT_SECRET_KEY}
       - ENVIRONMENT=production
+      - UVICORN_WORKERS=1
       # Important: Allow the frontend to talk to backend
       - CORS_ORIGINS=["http://167.71.217.164","http://localhost", "https://aistudyhub.app"]
     volumes:

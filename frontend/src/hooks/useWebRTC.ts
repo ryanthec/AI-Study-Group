@@ -1,9 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
-interface PeerState {
-  [userId: string]: MediaStream;
-}
-
 export interface VoiceUser {
   userId: string;
   username: string;
@@ -14,321 +10,209 @@ const ICE_SERVERS: RTCConfiguration = {
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
   ],
-  iceCandidatePoolSize: 10,
 };
 
-export const useWebRTC = (roomId: string, userId: string, userName: string, websocketUrl: string) => {
-  const [peers, setPeers] = useState<PeerState>({});
-  const [connectedUsers, setConnectedUsers] = useState<VoiceUser[]>([]);
-  const [isConnected, setIsConnected] = useState(false);
+export const useWebRTC = (groupId: string, userId: string, userName: string, websocketUrl: string) => {
+  // State
+  const [activeUsers, setActiveUsers] = useState<VoiceUser[]>([]); // Who is in voice?
+  const [isInVoice, setIsInVoice] = useState(false); // Am I in voice?
+  const [peers, setPeers] = useState<Record<string, MediaStream>>({});
   const [isMuted, setIsMuted] = useState(false);
 
+  // Refs
   const socketRef = useRef<WebSocket | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const peersRef = useRef<Record<string, RTCPeerConnection>>({});
-  const pingIntervalRef = useRef<number | null>(null);
 
-  // --- HELPER FUNCTIONS ---
-  const handleUserLeft = useCallback((id: string) => {
-    peersRef.current[id]?.close();
-    delete peersRef.current[id];
+  // --- 1. CLEANUP HELPERS ---
+  const closePeer = useCallback((peerId: string) => {
+    if (peersRef.current[peerId]) {
+      peersRef.current[peerId].close();
+      delete peersRef.current[peerId];
+    }
     setPeers(prev => {
-      const n = { ...prev };
-      delete n[id];
-      return n;
+      const copy = { ...prev };
+      delete copy[peerId];
+      return copy;
     });
-    setConnectedUsers(prev => prev.filter(u => u.userId !== id));
   }, []);
 
-  const handleAnswer = useCallback(async (id: string, ans: RTCSessionDescriptionInit) => {
-    const pc = peersRef.current[id];
-    if (!pc) return;
-
-    if (pc.signalingState === 'stable') {
-      console.warn(`[WebRTC] Ignored duplicate answer from ${id}`);
-      return;
+  const leaveAudio = useCallback(() => {
+    // 1. Stop Local Stream
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(t => t.stop());
+      localStreamRef.current = null;
     }
+    // 2. Close All Peer Connections
+    Object.keys(peersRef.current).forEach(closePeer);
+    
+    // 3. Update State
+    setIsInVoice(false);
+    setIsMuted(false);
 
-    try {
-      await pc.setRemoteDescription(new RTCSessionDescription(ans));
-    } catch (e) {
-      console.error("Error setting remote description:", e);
+    // 4. Notify Server (but keep socket open!)
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ type: 'leave_voice' }));
     }
-  }, []);
+  }, [closePeer]);
 
-  const handleIceCandidate = useCallback(async (id: string, candidate: RTCIceCandidateInit) => {
-    try {
-      const pc = peersRef.current[id];
-      if (pc && pc.remoteDescription) {
-        await pc.addIceCandidate(new RTCIceCandidate(candidate));
-      }
-    } catch (e) {
-      console.warn('[WebRTC] ICE candidate error (may be harmless):', e);
-    }
-  }, []);
-
-  // --- CORE WEBRTC LOGIC ---
-  const createPeerConnection = useCallback(async (
-    targetUserId: string,
-    isInitiator: boolean,
-    incomingOffer?: RTCSessionDescriptionInit
-  ) => {
-    const existingPC = peersRef.current[targetUserId];
-
-    if (existingPC && !incomingOffer) {
-      const ice = existingPC.iceConnectionState;
-      if (['connected', 'checking', 'completed'].includes(ice)) return;
-      if (existingPC.signalingState === 'have-local-offer') return;
-    }
-
-    if (existingPC) {
-      existingPC.close();
-      delete peersRef.current[targetUserId];
-    }
+  // --- 2. WEBRTC HANDLERS ---
+  const createPeer = useCallback(async (targetId: string, initiator: boolean, offer?: RTCSessionDescriptionInit) => {
+    if (peersRef.current[targetId]) return peersRef.current[targetId];
 
     const pc = new RTCPeerConnection(ICE_SERVERS);
-    peersRef.current[targetUserId] = pc;
+    peersRef.current[targetId] = pc;
 
+    // Add local tracks
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => {
         pc.addTrack(track, localStreamRef.current!);
       });
     }
 
-    pc.ontrack = (event) => {
-      setPeers(prev => ({ ...prev, [targetUserId]: event.streams[0] }));
+    // Handle Incoming Stream
+    pc.ontrack = (e) => {
+      setPeers(prev => ({ ...prev, [targetId]: e.streams[0] }));
     };
 
-    pc.onicecandidate = (event) => {
-      if (event.candidate && socketRef.current?.readyState === WebSocket.OPEN) {
+    // Handle ICE
+    pc.onicecandidate = (e) => {
+      if (e.candidate && socketRef.current?.readyState === WebSocket.OPEN) {
         socketRef.current.send(JSON.stringify({
           type: 'ice-candidate',
-          userId,
-          targetUserId,
-          candidate: event.candidate,
+          targetUserId: targetId,
+          candidate: e.candidate,
+          userId // Sender
         }));
       }
     };
 
-    pc.oniceconnectionstatechange = () => {
-      console.log(`[WebRTC] ICE state for ${targetUserId}: ${pc.iceConnectionState}`);
-
-      if (pc.iceConnectionState === 'failed') {
-        pc.restartIce();
-      }
-
-      if (pc.iceConnectionState === 'disconnected') {
-        setTimeout(() => {
-          if (peersRef.current[targetUserId]?.iceConnectionState === 'disconnected' ||
-              peersRef.current[targetUserId]?.iceConnectionState === 'failed') {
-            handleUserLeft(targetUserId);
-          }
-        }, 5000);
-      }
-    };
-
-    try {
-      if (isInitiator) {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        if (socketRef.current?.readyState === WebSocket.OPEN) {
-          socketRef.current.send(JSON.stringify({
-            type: 'offer',
-            userId,
-            targetUserId,
-            offer,
-          }));
-        }
-      } else if (incomingOffer) {
-        await pc.setRemoteDescription(new RTCSessionDescription(incomingOffer));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        if (socketRef.current?.readyState === WebSocket.OPEN) {
-          socketRef.current.send(JSON.stringify({
-            type: 'answer',
-            userId,
-            targetUserId,
-            answer,
-          }));
-        }
-      }
-    } catch (err) {
-      console.error("PeerConnection setup failed:", err);
+    // Negotiation
+    if (initiator) {
+      const offerDescription = await pc.createOffer();
+      await pc.setLocalDescription(offerDescription);
+      socketRef.current?.send(JSON.stringify({
+        type: 'offer',
+        targetUserId: targetId,
+        offer: offerDescription,
+        userId
+      }));
+    } else if (offer) {
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socketRef.current?.send(JSON.stringify({
+        type: 'answer',
+        targetUserId: targetId,
+        answer,
+        userId
+      }));
     }
-  }, [userId, handleUserLeft]);
 
-  // --- SYNC / POLLING LOGIC ---
-  const syncUsers = useCallback((serverUsers: VoiceUser[]) => {
-    setConnectedUsers(prev => {
-      const existingIds = new Set(prev.map(u => u.userId));
-      const newUsers = serverUsers.filter(u => !existingIds.has(u.userId));
-      return [...prev, ...newUsers];
-    });
+    return pc;
+  }, [userId]);
 
-    serverUsers.forEach(u => {
-      if (u.userId === userId) return;
+  const handleSignal = useCallback(async (data: any) => {
+    const sender = data.userId;
+    if (sender === userId) return;
 
-      const pc = peersRef.current[u.userId];
-      const isDead = !pc || ['failed', 'disconnected', 'closed'].includes(pc.iceConnectionState);
+    if (data.type === 'offer') {
+      await createPeer(sender, false, data.offer);
+    } else if (data.type === 'answer') {
+      const pc = peersRef.current[sender];
+      if (pc) await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+    } else if (data.type === 'ice-candidate') {
+      const pc = peersRef.current[sender];
+      if (pc) await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+    }
+  }, [userId, createPeer]);
 
-      if (isDead && userId < u.userId) {
-        console.log(`[Polling] Healing connection to ${u.username}`);
-        createPeerConnection(u.userId, true);
-      }
-    });
-  }, [userId, createPeerConnection]);
-
-  // --- SOCKET CONNECTION ---
-  const connectSocket = useCallback(() => {
+  // --- 3. SIGNALING SOCKET ---
+  useEffect(() => {
+    // Establish connection on mount (Signaling only)
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    let fullUrl = websocketUrl;
-    if (!websocketUrl.startsWith('ws')) {
-      fullUrl = `${protocol}//${websocketUrl}`;
-    }
+    // Remove "http://" or "https://" from websocketUrl if present
+    const cleanUrl = websocketUrl.replace(/^https?:\/\//, '');
+    const wsUrl = `${protocol}//${cleanUrl}/${groupId}/${userId}?username=${encodeURIComponent(userName)}`;
+    
+    const ws = new WebSocket(wsUrl);
+    socketRef.current = ws;
 
-    const url = `${fullUrl}/${roomId}/${userId}?username=${encodeURIComponent(userName)}`;
-    socketRef.current = new WebSocket(url);
-
-    socketRef.current.onopen = () => {
-      console.log('[WebRTC] WebSocket connected');
-      if (socketRef.current?.readyState === WebSocket.OPEN) {
-        socketRef.current.send(JSON.stringify({ type: 'client_ready' }));
-      }
-
-      if (pingIntervalRef.current) window.clearInterval(pingIntervalRef.current);
-      pingIntervalRef.current = window.setInterval(() => {
-        if (socketRef.current?.readyState === WebSocket.OPEN) {
-          socketRef.current.send(JSON.stringify({ type: 'ping', userId }));
-        }
-      }, 30000);
+    ws.onopen = () => {
+      console.log('Connected to Signaling Server');
+      // Keep-alive
+      setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ping' }));
+      }, 25000);
     };
 
-    socketRef.current.onmessage = async (event) => {
-      const data = JSON.parse(event.data);
-      const senderId = data.userId;
-
-      if (data.type === 'pong') return; // Ignore pong responses
-
-      if (data.type === 'existing-users') {
-        const others = data.users as VoiceUser[];
-        setConnectedUsers(prev => {
-          const existingIds = new Set(prev.map(u => u.userId));
-          const newUsers = others.filter(u => !existingIds.has(u.userId));
-          return [...prev, ...newUsers];
-        });
-
-        others.forEach(u => {
-          if (userId < u.userId) {
-            createPeerConnection(u.userId, true);
-          }
-        });
-        return;
-      }
-
-      if (senderId === userId) return;
+    ws.onmessage = async (evt) => {
+      const data = JSON.parse(evt.data);
 
       switch (data.type) {
-        case 'user-joined':
-          setConnectedUsers(prev => {
-            if (prev.find(u => u.userId === senderId)) return prev;
-            return [...prev, { userId: senderId, username: data.username || 'Unknown' }];
-          });
-          if (userId < senderId) {
-            createPeerConnection(senderId, true);
-          }
+        case 'room_state':
+          // Updated list of who is in the room
+          setActiveUsers(data.users);
           break;
-
-        case 'user-left':
-          handleUserLeft(senderId);
+        
+        case 'you_joined':
+          // Confirmed: I am in voice. Initiate connection to existing peers.
+          data.peers.forEach((peer: VoiceUser) => {
+            createPeer(peer.userId, true);
+          });
+          break;
+        
+        case 'peer_left':
+          closePeer(data.userId);
           break;
 
         case 'offer':
-          setConnectedUsers(prev => {
-            if (prev.find(u => u.userId === senderId)) return prev;
-            return [...prev, { userId: senderId, username: data.username || 'Unknown' }];
-          });
-          await createPeerConnection(senderId, false, data.offer);
-          break;
-
         case 'answer':
-          await handleAnswer(senderId, data.answer);
-          break;
-
         case 'ice-candidate':
-          await handleIceCandidate(senderId, data.candidate);
+          // Only handle signals if I am actually in voice
+          // (Or if I am joining, I might receive an offer)
+          handleSignal(data);
           break;
       }
     };
 
-    socketRef.current.onerror = (error) => {
-      console.error('[WebRTC] WebSocket error:', error);
+    return () => {
+      leaveAudio(); // Clean up media
+      ws.close();
     };
+  }, [groupId, userId, userName, websocketUrl, leaveAudio, createPeer, handleSignal, closePeer]);
 
-    socketRef.current.onclose = () => {
-      console.log('[WebRTC] WebSocket closed');
-    };
-  }, [roomId, userId, userName, websocketUrl, createPeerConnection, handleAnswer, handleIceCandidate, handleUserLeft]);
-
-  // --- JOIN / LEAVE ---
+  // --- 4. USER ACTIONS ---
   const joinVoice = useCallback(async () => {
+    if (isInVoice) return;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       localStreamRef.current = stream;
-      connectSocket();
-      setIsConnected(true);
-      setConnectedUsers([{ userId, username: userName }]);
-    } catch (err) {
-      console.error("Error accessing microphone:", err);
-      alert("Could not access microphone. Please allow permissions.");
+      setIsInVoice(true);
+      
+      // Send "I am joining" signal
+      socketRef.current?.send(JSON.stringify({ type: 'join_voice' }));
+    } catch (e) {
+      console.error("Failed to get microphone", e);
+      alert("Could not access microphone");
     }
-  }, [userId, userName, connectSocket]);
-
-  const leaveVoice = useCallback(() => {
-    if (pingIntervalRef.current) {
-      window.clearInterval(pingIntervalRef.current);
-      pingIntervalRef.current = null;
-    }
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach(track => track.stop());
-      localStreamRef.current = null;
-    }
-    if (socketRef.current) {
-      socketRef.current.close();
-      socketRef.current = null;
-    }
-    Object.values(peersRef.current).forEach(pc => pc.close());
-    peersRef.current = {};
-    setPeers({});
-    setConnectedUsers([]);
-    setIsConnected(false);
-    setIsMuted(false);
-  }, []);
+  }, [isInVoice]);
 
   const toggleMute = useCallback(() => {
     if (localStreamRef.current) {
-      const audioTrack = localStreamRef.current.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !audioTrack.enabled;
-        setIsMuted(!audioTrack.enabled);
-      }
+      const track = localStreamRef.current.getAudioTracks()[0];
+      track.enabled = !track.enabled;
+      setIsMuted(!track.enabled);
     }
   }, []);
 
-  // --- CLEANUP ---
-  useEffect(() => {
-    return () => {
-      if (pingIntervalRef.current) {
-        window.clearInterval(pingIntervalRef.current);
-      }
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach(track => track.stop());
-      }
-      if (socketRef.current) {
-        socketRef.current.close();
-      }
-      Object.values(peersRef.current).forEach(pc => pc.close());
-    };
-  }, []);
-
-  return { peers, connectedUsers, joinVoice, leaveVoice, toggleMute, isMuted, isConnected, syncUsers };
+  return {
+    activeUsers, // Everyone in the channel
+    isInVoice,   // Am I connected?
+    peers,       // Audio streams
+    joinVoice,
+    leaveVoice: leaveAudio,
+    toggleMute,
+    isMuted
+  };
 };
