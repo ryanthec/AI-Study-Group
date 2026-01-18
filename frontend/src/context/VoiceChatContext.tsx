@@ -1,14 +1,12 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode, useState, useCallback, useRef, useEffect } from 'react';
 import { useWebRTC, VoiceUser } from '../hooks/useWebRTC';
-import axios from 'axios';
 
 interface VoiceChatContextType {
-  isConnected: boolean;
-  isMuted: boolean;
-  peers: Record<string, MediaStream>;
   activeUsers: VoiceUser[];
+  isInVoice: boolean;
   joinVoice: () => void;
   leaveVoice: () => void;
+  isMuted: boolean;
   toggleMute: () => void;
   peerVolumes: Record<string, number>;
   setPeerVolume: (userId: string, volume: number) => void;
@@ -28,41 +26,20 @@ export const VoiceChatProvider = ({
   userId: string;
   userName: string;
 }) => {
-  // Ensure WS_URL logic matches your environment
   const WS_URL = `${window.location.host}/api/v1/voice/ws`;
 
-  const { peers, connectedUsers, joinVoice, leaveVoice, toggleMute, isMuted, isConnected } = useWebRTC(groupId, userId, userName, WS_URL);
-  const [activeUsers, setActiveUsers] = useState<VoiceUser[]>([]);
+  // The hook now manages the "Always On" signaling connection
+  const { 
+    activeUsers, 
+    isInVoice, 
+    peers, 
+    joinVoice, 
+    leaveVoice, 
+    toggleMute, 
+    isMuted 
+  } = useWebRTC(groupId, userId, userName, WS_URL);
+
   const [peerVolumes, setPeerVolumes] = useState<Record<string, number>>({});
-
-  // Polling logic to see who is in the channel (even when disconnected)
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const res = await axios.get(`/api/v1/voice/groups/${groupId}/users`);
-        // If we are connected, we trust our WebRTC peers list + ourselves
-        // If disconnected, we trust the API
-        if (!isConnected) {
-            setActiveUsers(res.data.users);
-        }
-      } catch (e) {
-        console.error("Failed to fetch voice users", e);
-      }
-    };
-
-    fetchUsers(); // Initial fetch
-    const interval = setInterval(fetchUsers, 3000); // Poll every 3s
-    return () => clearInterval(interval);
-  }, [groupId, isConnected]);
-
-
-  // When connected, active users are peers + me
-  useEffect(() => {
-    if (isConnected) {
-      setActiveUsers(connectedUsers);
-    }
-  }, [connectedUsers, isConnected]);
-
 
   const setPeerVolume = useCallback((targetId: string, volume: number) => {
     setPeerVolumes(prev => ({ ...prev, [targetId]: volume }));
@@ -70,19 +47,18 @@ export const VoiceChatProvider = ({
 
   return (
     <VoiceChatContext.Provider value={{
-      isConnected,
-      isMuted,
-      peers,
       activeUsers,
+      isInVoice,
       joinVoice,
       leaveVoice,
+      isMuted,
       toggleMute,
       peerVolumes,
       setPeerVolume,
       currentUser: { id: userId, name: userName }
     }}>
       {children}
-      {/* Render the Audio Manager here so it's always active */}
+      {/* Invisible Audio Manager to render streams */}
       <VoiceAudioManager peers={peers} peerVolumes={peerVolumes} />
     </VoiceChatContext.Provider>
   );
@@ -94,8 +70,7 @@ export const useVoiceChat = () => {
   return context;
 };
 
-// --- Internal Component: Audio Manager ---
-// Handles playing the audio streams invisibly
+// --- AUDIO MANAGER (No changes needed here, logic is solid) ---
 const VoiceAudioManager = ({ 
   peers, 
   peerVolumes 
@@ -104,10 +79,11 @@ const VoiceAudioManager = ({
   peerVolumes: Record<string, number>; 
 }) => {
   return (
-    <div style={{ display: 'none' }}>
+    <div style={{ display: 'none' }} aria-hidden="true">
       {Object.entries(peers).map(([peerId, stream]) => (
         <AudioElement 
           key={peerId} 
+          peerId={peerId}
           stream={stream} 
           volume={peerVolumes[peerId] ?? 1} 
         />
@@ -116,12 +92,14 @@ const VoiceAudioManager = ({
   );
 };
 
-const AudioElement = ({ stream, volume }: { stream: MediaStream; volume: number }) => {
-  const ref = React.useRef<HTMLAudioElement>(null);
-  
+const AudioElement = ({ peerId, stream, volume }: { peerId: string; stream: MediaStream; volume: number; }) => {
+  const ref = useRef<HTMLAudioElement>(null);
   useEffect(() => {
-    if (ref.current && stream) ref.current.srcObject = stream;
-  }, [stream]);
+    const audio = ref.current;
+    if (!audio || !stream) return;
+    audio.srcObject = stream;
+    audio.play().catch(e => console.warn(`Autoplay blocked for ${peerId}`, e));
+  }, [stream, peerId]);
 
   useEffect(() => {
     if (ref.current) ref.current.volume = volume;

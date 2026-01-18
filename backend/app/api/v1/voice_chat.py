@@ -1,90 +1,156 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from typing import Dict, List, Any
+from typing import Dict, List, Set, Any
 import json
+import logging
+import asyncio
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/voice", tags=["voice"])
 
-class ConnectionManager:
+class VoiceRoom:
     def __init__(self):
-        # Store connections with metadata
-        # Structure: {group_id: {user_id: {'socket': WebSocket, 'username': str}}}
-        self.active_connections: Dict[str, Dict[str, Dict[str, Any]]] = {}
+        # Users currently viewing the page (connected to WS)
+        # {user_id: WebSocket}
+        self.subscribers: Dict[str, WebSocket] = {}
+        
+        # Users actually IN the voice chat
+        # {user_id: {'username': str, 'joined_at': float}}
+        self.voice_participants: Dict[str, dict] = {}
 
-    async def connect(self, websocket: WebSocket, group_id: str, user_id: str, username: str):
-        await websocket.accept()
-        if group_id not in self.active_connections:
-            self.active_connections[group_id] = {}
-        # Store socket AND username
-        self.active_connections[group_id][user_id] = {
-            'socket': websocket,
-            'username': username
-        }
+    async def broadcast(self, message: dict, exclude_user: str = None):
+        """Send a message to ALL subscribers (viewers + participants)"""
+        msg_json = json.dumps(message)
+        to_remove = []
+        
+        for user_id, ws in self.subscribers.items():
+            if user_id == exclude_user:
+                continue
+            try:
+                await ws.send_text(msg_json)
+            except Exception:
+                to_remove.append(user_id)
+        
+        for uid in to_remove:
+            self.disconnect_user(uid)
 
-    def disconnect(self, group_id: str, user_id: str):
-        if group_id in self.active_connections:
-            if user_id in self.active_connections[group_id]:
-                del self.active_connections[group_id][user_id]
-            if not self.active_connections[group_id]:
-                del self.active_connections[group_id]
+    def add_subscriber(self, user_id: str, websocket: WebSocket):
+        self.subscribers[user_id] = websocket
 
-    async def broadcast_to_others(self, message: dict, group_id: str, sender_id: str):
-        if group_id in self.active_connections:
-            for user_id, user_data in self.active_connections[group_id].items():
-                if user_id != sender_id:
-                    await user_data['socket'].send_text(json.dumps(message))
-    
-    # Return objects with ID and Name instead of just ID strings
-    def get_active_users(self, group_id: str) -> List[Dict[str, str]]:
-        if group_id in self.active_connections:
-            return [
-                {"userId": uid, "username": data['username']} 
-                for uid, data in self.active_connections[group_id].items()
-            ]
-        return []
+    def add_voice_participant(self, user_id: str, info: dict):
+        self.voice_participants[user_id] = info
 
-manager = ConnectionManager()
+    def remove_voice_participant(self, user_id: str):
+        if user_id in self.voice_participants:
+            del self.voice_participants[user_id]
 
-@router.get("/groups/{group_id}/users")
-async def get_voice_users(group_id: str):
-    """Get list of users currently in the voice channel"""
-    return {"users": manager.get_active_users(group_id)}
+    def disconnect_user(self, user_id: str):
+        if user_id in self.subscribers:
+            del self.subscribers[user_id]
+        if user_id in self.voice_participants:
+            del self.voice_participants[user_id]
 
-# Updated to accept username query param
+    def get_participant_list(self) -> List[dict]:
+        return [
+            {"userId": uid, **info}
+            for uid, info in self.voice_participants.items()
+        ]
+
+# Global manager: {group_id: VoiceRoom}
+rooms: Dict[str, VoiceRoom] = {}
+
+def get_room(group_id: str) -> VoiceRoom:
+    if group_id not in rooms:
+        rooms[group_id] = VoiceRoom()
+    return rooms[group_id]
+
 @router.websocket("/ws/{group_id}/{user_id}")
-async def voice_chat_endpoint(websocket: WebSocket, group_id: str, user_id: str, username: str = "User"):
-    await manager.connect(websocket, group_id, user_id, username)
-    try:
-        # 1. Send existing users (names included) to the NEW person
-        current_users = manager.get_active_users(group_id)
-        # Filter out self
-        others = [u for u in current_users if u['userId'] != user_id]
-        
-        await websocket.send_text(json.dumps({
-            "type": "existing-users", 
-            "users": others
-        }))
+async def voice_endpoint(websocket: WebSocket, group_id: str, user_id: str, username: str = "User"):
+    await websocket.accept()
+    
+    room = get_room(group_id)
+    room.add_subscriber(user_id, websocket)
+    
+    # 1. Immediately send current voice participants to the new subscriber
+    # This satisfies Requirement #1 (Seeing users without joining)
+    await websocket.send_text(json.dumps({
+        "type": "room_state",
+        "users": room.get_participant_list()
+    }))
 
-        # 2. Notify OTHERS that a new user joined (include name)
-        await manager.broadcast_to_others(
-            {
-                "type": "user-joined", 
-                "userId": user_id, 
-                "username": username
-            }, 
-            group_id, 
-            user_id
-        )
-        
+    try:
         while True:
             data = await websocket.receive_text()
             message = json.loads(data)
-            # Forward signaling data
-            await manager.broadcast_to_others(message, group_id, user_id)
-            
+            msg_type = message.get('type')
+
+            if msg_type == 'ping':
+                await websocket.send_text(json.dumps({"type": "pong"}))
+                continue
+
+            # --- VOICE STATUS COMMANDS ---
+            if msg_type == 'join_voice':
+                # User is officially entering the voice channel
+                room.add_voice_participant(user_id, {'username': username})
+                
+                # Broadcast new state to EVERYONE (updates UI for all)
+                await room.broadcast({
+                    "type": "room_state",
+                    "users": room.get_participant_list()
+                })
+                
+                # Tell the joiner who else is there so they can initiate WebRTC
+                # (We filter out the user themselves)
+                others = [
+                    u for u in room.get_participant_list() 
+                    if u['userId'] != user_id
+                ]
+                await websocket.send_text(json.dumps({
+                    "type": "you_joined",
+                    "peers": others
+                }))
+
+            elif msg_type == 'leave_voice':
+                # User explicitly clicked "Leave" but stays on the page
+                room.remove_voice_participant(user_id)
+                
+                # Broadcast update
+                await room.broadcast({
+                    "type": "room_state",
+                    "users": room.get_participant_list()
+                })
+                
+                # Also explicitly tell others to kill the WebRTC connection for this peer
+                await room.broadcast({
+                    "type": "peer_left",
+                    "userId": user_id
+                }, exclude_user=user_id)
+
+            # --- WEBRTC SIGNALING ---
+            elif msg_type in ('offer', 'answer', 'ice-candidate'):
+                target_id = message.get('targetUserId')
+                if target_id and target_id in room.subscribers:
+                    target_ws = room.subscribers[target_id]
+                    try:
+                        await target_ws.send_text(json.dumps(message))
+                    except Exception:
+                        logger.error(f"Failed to signal {target_id}")
+
     except WebSocketDisconnect:
-        manager.disconnect(group_id, user_id)
-        await manager.broadcast_to_others(
-            {"type": "user-left", "userId": user_id}, 
-            group_id, 
-            user_id
-        )
+        # Handle unexpected socket drop (tab close)
+        was_in_voice = user_id in room.voice_participants
+        room.disconnect_user(user_id)
+        
+        if was_in_voice:
+            # If they were speaking, tell everyone they are gone
+            await room.broadcast({
+                "type": "room_state",
+                "users": room.get_participant_list()
+            })
+            await room.broadcast({
+                "type": "peer_left",
+                "userId": user_id
+            })
+            
+    except Exception as e:
+        logger.error(f"Error in voice socket: {e}")
+        room.disconnect_user(user_id)

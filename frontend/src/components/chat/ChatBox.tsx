@@ -102,6 +102,8 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
       ws.onopen = () => {
         readyRef.current = true;
         setConnected(true);
+        // Signal to server that client is ready to receive messages
+        ws.send(JSON.stringify({ type: 'client_ready' }));
       };
 
       ws.onmessage = (e) => {
