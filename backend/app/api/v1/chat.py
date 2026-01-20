@@ -81,6 +81,10 @@ async def stream_ai_response(websocket: WebSocket, group_id: int, user_message: 
         # Clean the user message (remove @TeachingAI mention)
         clean_question = remove_ai_mention(user_message)
         
+        # Contextualize the question with the username
+        # This helps the LLM distinguish between users in the group chat history
+        contextualized_question = f"{username}: {clean_question}"
+
         # Send "AI is typing" indicator
         await manager.broadcast_to_group(
             {
@@ -100,7 +104,7 @@ async def stream_ai_response(websocket: WebSocket, group_id: int, user_message: 
         stream_generator = teaching_agent.answer_question_stream(
             session_id=session_id,
             group_id=group_id,
-            question=clean_question,
+            question=contextualized_question,
             use_rag=True,
             db_session=db,
             active_config=active_config # Pass the config here

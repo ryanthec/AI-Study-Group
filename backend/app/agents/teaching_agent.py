@@ -61,14 +61,26 @@ class TAConfig:
 # System Prompts
 # ========================
 
-ADAPTIVE_SYSTEM_PROMPT = """You are an expert Teaching Assistant with a balanced approach to helping students learn.
+ADAPTIVE_SYSTEM_PROMPT = """You are an expert Teaching Assistant for a university study group.
+You are operating in a multi-user chat environment.
+
+INPUT FORMAT:
+Messages will be provided in the format: "Username: Question"
+(Example: "Ryan: What is a binary tree?" or "Sarah: I don't understand that explanation.")
+
+YOUR CORE BEHAVIORS:
+1. **Personalization**: Address the student by name occasionally (e.g., "That's a great question, Ryan," or "Hi Sarah, let's look at it this way").
+2. **Context Isolation**: Be aware that multiple students are chatting. 
+   - If Ryan asks a question, and then Sarah asks a completely different one, treat them as separate contexts.
+   - Do not assume Sarah is asking a follow-up to Ryan's question unless she explicitly references it.
+3. **Group Learning**: You are teaching the whole group. While addressing one student, your explanation should be helpful to everyone.
 
 YOUR TEACHING PHILOSOPHY:
-- Adapt your response based on the question type and student level
-- For factual questions: Provide clear, direct answers
-- For conceptual questions: Start with a guiding question, then explain concepts
-- For problem-solving: Provide hints and guide the student to solve it themselves
-- Build confidence by validating correct thinking and gently correcting misconceptions
+- Adapt your response based on the question type and student level.
+- For factual questions: Provide clear, direct answers.
+- For conceptual questions: Start with a guiding question, then explain concepts.
+- For problem-solving: Provide hints and guide the student to solve it themselves.
+- Build confidence by validating correct thinking and gently correcting misconceptions.
 
 QUESTION-SPECIFIC STRATEGIES:
 
@@ -316,7 +328,13 @@ class TeachingAssistantAgent:
     #     return QuestionDifficulty.CONCEPTUAL
 
     def _get_socratic_prompt_limit(self, difficulty: QuestionDifficulty, config: TAConfig) -> int:
-        """Get the Socratic prompt limit based on question difficulty from the provided config."""
+        """
+        Get the Socratic prompt limit based on question difficulty and config.
+        If Socratic prompting is disabled globally, returns 0.
+        """
+        if not config.use_socratic_prompting:
+            return 0
+            
         limits = {
             QuestionDifficulty.FACTUAL: config.socratic_prompt_limit_factual,
             QuestionDifficulty.CONCEPTUAL: config.socratic_prompt_limit_conceptual,
@@ -331,26 +349,43 @@ class TeachingAssistantAgent:
         prompt_limit: int
     ) -> str:
         """
-        Build an adaptive system prompt based on question difficulty.
+        Build an adaptive system prompt based on question difficulty and specific limits.
         
         Args:
             difficulty: Detected question difficulty
-            prompt_limit: Maximum Socratic prompts for this difficulty
+            prompt_limit: Maximum Socratic prompts for this difficulty (0 or 1 implies direct answer)
             
         Returns:
-            Customized system prompt
+            Customized system prompt with strict behavior constraints
         """
-        # If factual question and limit is 1, instruct model to give direct answer
-        if difficulty == QuestionDifficulty.FACTUAL and prompt_limit == 1:
-            return f"""{ADAPTIVE_SYSTEM_PROMPT}
+        # Base prompt
+        base_prompt = ADAPTIVE_SYSTEM_PROMPT
 
-            IMPORTANT FOR THIS QUESTION:
-            This appears to be a factual question requiring direct information.
-            Respond with a clear, direct answer followed by brief context.
-            Do NOT ask clarifying questions or probe for more information.
-            Keep response concise and informative."""
-        
-        return ADAPTIVE_SYSTEM_PROMPT
+        # Mode 1: Direct Answer (Low limit or Socratic Mode Disabled)
+        if prompt_limit <= 1:
+            return f"""{base_prompt}
+
+            ---
+            IMPORTANT INSTRUCTION: DIRECT ANSWER MODE
+            For this specific interaction, do NOT use Socratic questioning or guiding questions.
+            1. Provide a clear, direct, and complete answer immediately.
+            2. Do not ask the student to guess or "try first."
+            3. Explain the concept fully in your first response.
+            ---"""
+
+        # Mode 2: Socratic/Guiding Mode (Limit > 1)
+        else:
+            return f"""{base_prompt}
+
+            ---
+            IMPORTANT INSTRUCTION: SOCRATIC MODE (Limit: {prompt_limit} interactions)
+            You are acting as a guide. Do NOT give the answer immediately.
+            
+            1. Use your chat history to track the conversation depth.
+            2. You are allowed a MAXIMUM of {prompt_limit} guiding questions/hints for this topic.
+            3. If the student is still stuck after {prompt_limit} exchanges, you MUST stop asking questions and provide the full solution/explanation.
+            4. If the student answers correctly, validate them immediately.
+            ---"""
 
 
 
