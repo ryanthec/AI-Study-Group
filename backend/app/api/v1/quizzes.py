@@ -13,13 +13,14 @@ from ...models.study_group import StudyGroup
 from ...models.study_group_membership import StudyGroupMembership
 from ...agents.base_llm_model import BaseLLMModel
 from ...agents.quiz_agent import QuizGeneratorAgent
+from ...agents.gap_analysis_agent import GapAnalysisAgent
 from ...schemas.quiz import QuizCreateRequest, QuizResponse, QuizAttemptRequest, QuizAttemptResponse, QuizAttemptSummary
 
 
 router = APIRouter(prefix="/quizzes", tags=["quizzes"])
 llm_model = BaseLLMModel()
 quiz_agent = QuizGeneratorAgent(llm_model)
-
+gap_agent = GapAnalysisAgent(llm_model)
 
 # --- Endpoints ---
 
@@ -66,6 +67,7 @@ async def create_quiz(
         study_group_id=group_id,
         creator_id=current_user.id,
         questions=quiz_content.get("questions", []),
+        document_ids=request.document_ids,
         scope=QuizScope(request.scope),
         num_questions=len(quiz_content.get("questions", [])),
     )
@@ -78,6 +80,7 @@ async def create_quiz(
         id=new_quiz.id,
         title=new_quiz.title,
         description=new_quiz.description,
+        study_group_id=new_quiz.study_group_id,
         num_questions=new_quiz.num_questions,
         scope=new_quiz.scope.value,
         created_at=new_quiz.created_at.isoformat(),
@@ -120,6 +123,7 @@ def list_quizzes(
             id=quiz.id,
             title=quiz.title,
             description=quiz.description,
+            study_group_id=quiz.study_group_id,
             num_questions=quiz.num_questions,
             scope=quiz.scope.value,
             created_at=quiz.created_at.isoformat(),
@@ -246,5 +250,65 @@ def get_latest_quiz_attempt(
         percentage=(attempt.score / attempt.total_questions) * 100,
         passed=(attempt.score / attempt.total_questions) >= 0.5,
         completed_at=attempt.completed_at.isoformat(),
-        answers=attempt.answers # Make sure to cast keys to int if needed in frontend
+        answers=attempt.answers,
+        analysis_report=attempt.analysis_report
     )
+
+
+class GapAnalysisResponse(BaseModel):
+    analysis_markdown: str
+
+@router.post("/groups/{group_id}/analyze_attempt/{attempt_id}", response_model=QuizAttemptResponse)
+async def analyze_quiz_attempt(
+    group_id: int,
+    attempt_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # Verify Attempt
+    attempt = db.query(QuizAttempt).filter(
+        QuizAttempt.id == attempt_id,
+        QuizAttempt.user_id == current_user.id
+    ).first()
+    
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Quiz attempt not found")
+
+    # CHECK: If report already exists, return it immediately!
+    if attempt.analysis_report:
+        return QuizAttemptResponse(
+            attempt_id=attempt.id,
+            score=attempt.score,
+            total_questions=attempt.total_questions,
+            percentage=(attempt.score / attempt.total_questions) * 100,
+            passed=(attempt.score / attempt.total_questions) >= 0.5,
+            completed_at=attempt.completed_at.isoformat(),
+            answers=attempt.answers,
+            analysis_report=attempt.analysis_report
+        )
+        
+    quiz = db.query(Quiz).filter(Quiz.id == attempt.quiz_id).first()
+    if not quiz:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+        
+    try:
+        # Generate Analysis (We will update the Agent next)
+        analysis_text = await gap_agent.generate_analysis(quiz, attempt, db)
+        
+        # SAVE to DB
+        attempt.analysis_report = analysis_text
+        db.commit()
+        db.refresh(attempt)
+        
+        return QuizAttemptResponse(
+            attempt_id=attempt.id,
+            score=attempt.score,
+            total_questions=attempt.total_questions,
+            percentage=(attempt.score / attempt.total_questions) * 100,
+            passed=(attempt.score / attempt.total_questions) >= 0.5,
+            completed_at=attempt.completed_at.isoformat(),
+            answers=attempt.answers,
+            analysis_report=attempt.analysis_report
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")

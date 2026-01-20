@@ -28,6 +28,7 @@ class QuizAttemptResponse(BaseModel):
     passed: bool
     completed_at: str
     answers: Dict[int, str]
+    analysis_report: Optional[str] = None
 
 
 # Add a helper model for clarity
@@ -41,6 +42,7 @@ class QuizResponse(BaseModel):
     id: int
     title: str
     description: Optional[str] = None
+    study_group_id: int
     num_questions: int
     scope: str
     created_at: str

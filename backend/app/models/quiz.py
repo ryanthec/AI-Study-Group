@@ -19,6 +19,9 @@ class Quiz(Base):
     creator_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     
     questions = Column(JSON, nullable=False)
+    # Store document IDs to access it later for gap analysis
+    document_ids = Column(JSON, nullable=True)
+
     scope = Column(Enum(QuizScope), default=QuizScope.GROUP)
     num_questions = Column(Integer, default=10)
     
@@ -37,9 +40,9 @@ class QuizAttempt(Base):
     
     score = Column(Integer, nullable=False)
     total_questions = Column(Integer, nullable=False)
-    
-    # NEW: Store the specific answers the user gave
     answers = Column(JSON, nullable=False) 
+    
+    analysis_report = Column(Text, nullable=True)
     
     completed_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc))
     

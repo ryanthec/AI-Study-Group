@@ -43,7 +43,12 @@ export interface QuizAttemptResult {
     percentage: number;
     passed: boolean;
     completed_at: string;
-    answers?: Record<number, string>; // Optional, present when fetching details
+    answers?: Record<number, string>;
+    analysis_report?: string;
+}
+
+export interface GapAnalysisResponse {
+    analysis_markdown: string;
 }
 
 class QuizService {
@@ -72,6 +77,14 @@ class QuizService {
   async getLatestAttempt(groupId: number, quizId: number): Promise<QuizAttemptResult> {
     const response = await api.get<QuizAttemptResult>(
         `/quizzes/groups/${groupId}/latest_attempt/${quizId}`
+    );
+    return response.data;
+  }
+
+  async analyzeAttempt(groupId: number, attemptId: number): Promise<QuizAttemptResult> {
+    const response = await api.post<QuizAttemptResult>(
+        `/quizzes/groups/${groupId}/analyze_attempt/${attemptId}`,
+        {}
     );
     return response.data;
   }
