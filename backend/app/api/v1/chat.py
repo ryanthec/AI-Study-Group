@@ -1,6 +1,9 @@
 # app/api/v1/chat.py
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from datetime import datetime, timezone
+from typing import Optional
 import json
 import asyncio
 from jose import jwt, JWTError
@@ -8,6 +11,7 @@ from jose import jwt, JWTError
 # Core and services
 from ...core.database import get_db
 from ...core.websocket_manager import manager
+from ...core.security import get_current_user
 from ...services.message_service import MessageService
 from ...services.study_group_service import StudyGroupService
 from ...services.rag_service import rag_service
@@ -16,18 +20,25 @@ from ...config import settings
 
 # Models
 from ...models.study_group_membership import StudyGroupMembership
-from ...models.study_group_message import MessageType
+from ...models.study_group_message import StudyGroupMessage, MessageType
 from ...models.user import User
+
+# Schemas
+from ...schemas.messages import MissedMessagesResponse, SummaryResponse
 
 # Agents
 from ...agents.teaching_agent import TeachingAssistantAgent, TAConfig, RAGMode, QuestionDifficulty
 from ...agents.base_llm_model import BaseLLMModel
+from ...agents.summarising_agent import SummarisingAgent
+
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
-
 # 1. Singleton LLM Client (Keeps connections/session cache efficient)
 base_llm = BaseLLMModel()
+
+# Summarising Agent instance
+summarising_agent = SummarisingAgent(base_llm)
 
 # 2. Factory to create TeachingAssistantAgent instances
 def get_agent_for_group(group_id: int, db: Session) -> TeachingAssistantAgent:
@@ -43,7 +54,6 @@ def get_agent_for_group(group_id: int, db: Session) -> TeachingAssistantAgent:
         rag_service=rag_service,
         config=config # Pass the DB-loaded config
     )
-
 
 def get_user_from_token(token: str, db: Session) -> User | None:
     try:
@@ -251,7 +261,6 @@ async def websocket_endpoint(websocket: WebSocket, group_id: int, db: Session = 
         # await manager.broadcast_to_group(MessageService.format_message_for_ws(leave, db), group_id)
         await manager.broadcast_online_users(group_id)
 
-
 @router.get("/{group_id}/messages")
 async def get_messages(
     group_id: int,
@@ -271,3 +280,104 @@ async def get_messages(
             raise HTTPException(status_code=403, detail="Not a member of this group")
     messages = MessageService.get_group_messages(db, group_id, limit=limit, offset=offset)
     return [MessageService.format_message_for_ws(m, db) for m in messages]
+
+
+
+# Endpoints for missed message count and summarisation
+@router.get("/groups/{group_id}/missed_count", response_model=MissedMessagesResponse)
+def get_missed_message_count(
+    group_id: int,
+    current_user: User = Depends(get_current_user), # Assuming you have this dep
+    db: Session = Depends(get_db)
+):
+    # 1. Get Membership to find last_viewed_at
+    membership = db.query(StudyGroupMembership).filter(
+        StudyGroupMembership.group_id == group_id,
+        StudyGroupMembership.user_id == current_user.id
+    ).first()
+    
+    if not membership:
+        raise HTTPException(status_code=403, detail="Not a member")
+        
+    last_viewed = membership.last_viewed_at
+    
+    # If never viewed, assume they missed everything (or handle as 0 if new joiner logic prefers)
+    if not last_viewed:
+        count = db.query(StudyGroupMessage).filter(
+            StudyGroupMessage.group_id == group_id
+        ).count()
+        return MissedMessagesResponse(missed_count=count, last_viewed=None)
+
+    # 2. Count messages created > last_viewed
+    count = db.query(StudyGroupMessage).filter(
+        StudyGroupMessage.group_id == group_id,
+        StudyGroupMessage.created_at > last_viewed
+    ).count()
+    
+    return MissedMessagesResponse(
+        missed_count=count, 
+        last_viewed=last_viewed.isoformat()
+    )
+
+
+@router.post("/groups/{group_id}/update_viewed")
+def update_last_viewed(
+    group_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    membership = db.query(StudyGroupMembership).filter(
+        StudyGroupMembership.group_id == group_id,
+        StudyGroupMembership.user_id == current_user.id
+    ).first()
+    
+    if membership:
+        membership.last_viewed_at = datetime.now(timezone.utc)
+        db.commit()
+    
+    return {"status": "updated"}
+
+
+@router.post("/groups/{group_id}/summarise_missed", response_model=SummaryResponse)
+async def summarise_missed_messages(
+    group_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    # 1. Get last viewed
+    membership = db.query(StudyGroupMembership).filter(
+        StudyGroupMembership.group_id == group_id,
+        StudyGroupMembership.user_id == current_user.id
+    ).first()
+    
+    if not membership or not membership.last_viewed_at:
+        # Fallback: Summarise last 50 messages if no timestamp
+        messages = MessageService.get_group_messages(db, group_id, limit=50)
+    else:
+        # 2. Fetch missed messages
+        # Note: MessageService might need a new method or we query directly here
+        messages_orm = db.query(StudyGroupMessage).filter(
+            StudyGroupMessage.group_id == group_id,
+            StudyGroupMessage.created_at > membership.last_viewed_at
+        ).order_by(StudyGroupMessage.created_at.asc()).all()
+        
+        # Limit to avoid token overflow (e.g., max 100 recent missed messages)
+        if len(messages_orm) > 150:
+            messages_orm = messages_orm[-150:]
+            
+        messages = messages_orm
+
+    if not messages:
+        return SummaryResponse(summary="No missed messages to summarise.")
+
+    # 3. Format for Agent
+    formatted_msgs = []
+    for m in messages:
+        # Resolving username might require a join or helper, assuming simple access here
+        username = m.user.username if m.user else "TeachingAI"
+        formatted_msgs.append({"username": username, "content": m.content})
+
+    # 4. Generate
+    summary_text = await summarising_agent.summarise_chat(formatted_msgs)
+    
+    return SummaryResponse(summary=summary_text)

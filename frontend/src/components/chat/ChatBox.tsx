@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
-import { Input, Button, Avatar, Typography, Space, Tag, Spin, Tooltip, AutoComplete, Divider} from 'antd';
+import { Input, Button, Card, Avatar, Typography, Space, Tag, Spin, Tooltip, AutoComplete, Divider, message, notification, Modal} from 'antd';
 import {
   SendOutlined,
   UserOutlined,
@@ -10,8 +10,10 @@ import {
   LoadingOutlined,
   FileTextOutlined,
   BulbOutlined,
+  ReadOutlined, 
+  CloseOutlined,
+  CopyOutlined,
 } from '@ant-design/icons';
-import { message } from 'antd';
 
 import { useAuth } from '../../hooks/useAuth';
 import { useTheme } from '../../hooks/useTheme';
@@ -20,13 +22,12 @@ import { chatService } from '../../services/chat.service';
 import { agentConfigService, AgentConfig } from '../../services/agentConfig.service';
 import type { ChatMessage } from '../../types/message.types';
 
-const { Text } = Typography;
+const { Text, Paragraph } = Typography;
 
 interface ChatBoxProps {
   groupId: number;
   onOnlineUsersUpdate?: (users: any[]) => void;
 }
-
 interface StreamingMessage {
   id: string;
   username: string;
@@ -60,11 +61,39 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // useStates for Summary
+  const [showSummaryPrompt, setShowSummaryPrompt] = useState(false);
+  const [missedCount, setMissedCount] = useState(0);
+  const [isSummarising, setIsSummarising] = useState(false);
+  const [summaryText, setSummaryText] = useState<string | null>(null);
+
   // refs for WebSocket and connection state
   const wsRef = useRef<WebSocket | null>(null);
   const readyRef = useRef(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<any>(null);
+
+  // Dynamic color definitions
+  const colors = {
+    messageBg: isDark ? '#313338' : '#ffffff',
+    chatBg: isDark ? '#313338' : '#f2f3f5',
+    inputBg: isDark ? '#383a40' : '#ffffff',
+    ownBubble: isDark ? '#5865f2' : '#5865f2',
+    otherBubble: isDark ? '#2b2d31' : '#e3e5e8',
+    aiBubble: isDark ? '#2b2d31' : '#f2f3f5',
+    ownText: '#ffffff',
+    otherText: isDark ? '#dbdee1' : '#313338',
+    secondaryText: isDark ? '#949ba4' : '#3e3e41ff',
+    border: isDark ? '#1e1f22' : '#e3e5e8',
+    inputBorder: isDark ? '#1e1f22' : '#59595aff',
+    onlineGreen: '#23a559',
+    offlineRed: '#f23f43',
+    // Agent Settings Toggle Button Colors
+    activeRag: '#1890ff',
+    activeSocratic: '#722ed1'
+  };
+
+  
 
   const isOpen = () => readyRef.current;
 
@@ -190,12 +219,38 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
     };
   }, [groupId]);
 
+  // useEffect to check missed messages on mount
+  useEffect(() => {
+    const checkMissed = async () => {
+      try {
+        const data = await chatService.getMissedCount(groupId);
+        if (data.missed_count > 30) {
+          setMissedCount(data.missed_count);
+          setShowSummaryPrompt(true);
+        } else {
+          // If count is low, just update "viewed" status immediately
+          await chatService.updateLastViewed(groupId);
+        }
+      } catch (e) {
+        console.error("Failed to check missed messages", e);
+      }
+    };
+    checkMissed();
+
+    // Cleanup: Update viewed status when leaving the component
+    return () => {
+        // We can try to update on unmount, but reliable execution isn't guaranteed
+        chatService.updateLastViewed(groupId).catch(() => {});
+    };
+  }, [groupId]);
+
+
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
 
-  // === TA Agent Config Toggle Handlers ===
+  // ====== TA Agent Config Toggle Handlers ======
 
   const toggleRag = async () => {
       if (!agentConfig || configLoading) return;
@@ -249,7 +304,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
     }
   };
 
-  // ==== INPUT HANDLERS ====
+  // ====== INPUT HANDLERS ======
 
   // Handle input change with @ detection
   const handleInputChange = (value: string) => {
@@ -335,26 +390,40 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
     }
   };
 
-  // Dynamic color definitions
-  const colors = {
-    messageBg: isDark ? '#313338' : '#ffffff',
-    chatBg: isDark ? '#313338' : '#f2f3f5',
-    inputBg: isDark ? '#383a40' : '#ffffff',
-    ownBubble: isDark ? '#5865f2' : '#5865f2',
-    otherBubble: isDark ? '#2b2d31' : '#e3e5e8',
-    aiBubble: isDark ? '#2b2d31' : '#f2f3f5',
-    ownText: '#ffffff',
-    otherText: isDark ? '#dbdee1' : '#313338',
-    secondaryText: isDark ? '#949ba4' : '#3e3e41ff',
-    border: isDark ? '#1e1f22' : '#e3e5e8',
-    inputBorder: isDark ? '#1e1f22' : '#59595aff',
-    onlineGreen: '#23a559',
-    offlineRed: '#f23f43',
-    // Agent Settings Toggle Button Colors
-    activeRag: '#1890ff',
-    activeSocratic: '#722ed1'
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      message.error('File size exceeds 10MB limit');
+      return;
+    }
+
+    const allowedExtensions = ['.pdf', '.txt', '.docx', '.doc', '.md'];
+    const fileName = file.name.toLowerCase();
+    const hasValidExtension = allowedExtensions.some((ext) => fileName.endsWith(ext));
+
+    if (!hasValidExtension) {
+      message.error(`Unsupported file format. Allowed: ${allowedExtensions.join(', ')}`);
+      return;
+    }
+
+    setUploading(true);
+    try {
+      await studyGroupService.uploadDocument(groupId, file);
+      message.success(`Document "${file.name}" uploaded successfully`);
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || 'Failed to upload document');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
   };
 
+
+  // ====== RENDERING HELPERS ======
 
   // Helper to force Markdown to respect vertical spacing
   const preprocessContent = (content: string) => {
@@ -505,37 +574,38 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
     );
   };
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // ====== SUMMARY HANDLERS ======
 
-    if (file.size > 10 * 1024 * 1024) {
-      message.error('File size exceeds 10MB limit');
-      return;
-    }
-
-    const allowedExtensions = ['.pdf', '.txt', '.docx', '.doc', '.md'];
-    const fileName = file.name.toLowerCase();
-    const hasValidExtension = allowedExtensions.some((ext) => fileName.endsWith(ext));
-
-    if (!hasValidExtension) {
-      message.error(`Unsupported file format. Allowed: ${allowedExtensions.join(', ')}`);
-      return;
-    }
-
-    setUploading(true);
+  const handleGenerateSummary = async () => {
+    setIsSummarising(true);
     try {
-      await studyGroupService.uploadDocument(groupId, file);
-      message.success(`Document "${file.name}" uploaded successfully`);
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || 'Failed to upload document');
+      const result = await chatService.summariseMissed(groupId);
+      setSummaryText(result.summary);
+      setShowSummaryPrompt(false); // Hide the prompt
+      
+      // Update viewed status now that we've addressed it
+      await chatService.updateLastViewed(groupId);
+    } catch (e) {
+      message.error("Failed to generate summary");
     } finally {
-      setUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      setIsSummarising(false);
     }
   };
+
+  const handleDismissSummary = () => {
+    setShowSummaryPrompt(false);
+    setSummaryText(null);
+    chatService.updateLastViewed(groupId);
+  };
+
+  const handleCopySummary = () => {
+    if (summaryText) {
+        navigator.clipboard.writeText(summaryText);
+        message.success("Summary copied to clipboard!");
+    }
+  };
+
+
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '400px', maxHeight: '100%', background: colors.chatBg }}>
@@ -570,6 +640,75 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
           </>
         )}
       </div>
+
+
+      {/* SUMMARY NOTIFICATION PROMPT*/}
+      {showSummaryPrompt && (
+        <div style={{
+          position: 'absolute',
+          bottom: '100px',
+          right: '24px',
+          zIndex: 1000,
+          width: '300px'
+        }}>
+          <Card 
+            size="small" 
+            title={
+                <Space>
+                    <ReadOutlined style={{ color: '#1890ff' }} />
+                    <Text strong>Welcome Back!</Text>
+                </Space>
+            }
+            extra={<Button type="text" size="small" icon={<CloseOutlined />} onClick={handleDismissSummary} />}
+            style={{ 
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                background: isDark ? '#1f1f1f' : '#fff',
+                borderColor: isDark ? '#434343' : '#f0f0f0'
+            }}
+          >
+            <Paragraph style={{ margin: 0, color: colors.otherText }}>
+              You missed <strong>{missedCount}</strong> messages while you were away.
+            </Paragraph>
+            <Button 
+              type="primary" 
+              block 
+              style={{ marginTop: '12px' }} 
+              onClick={handleGenerateSummary}
+              loading={isSummarising}
+            >
+              Summarize Conversation
+            </Button>
+          </Card>
+        </div>
+      )}
+
+      {/* SUMMARY RESULT MODAL (NEW IMPLEMENTATION) */}
+      <Modal
+        title={
+            <Space>
+                <ReadOutlined style={{ color: '#1890ff' }} />
+                <span>Conversation Summary</span>
+            </Space>
+        }
+        open={!!summaryText}
+        onCancel={() => setSummaryText(null)}
+        footer={[
+            <Button key="copy" icon={<CopyOutlined />} onClick={handleCopySummary}>
+                Copy Summary
+            </Button>,
+            <Button key="close" type="primary" onClick={() => setSummaryText(null)}>
+                Close
+            </Button>
+        ]}
+        width={600}
+        styles={{ body: { maxHeight: '60vh', overflowY: 'auto' } }}
+      >
+        <div style={{ padding: '8px', color: colors.otherText }}>
+             <ReactMarkdown remarkPlugins={[remarkBreaks]}>
+                {summaryText || ''}
+             </ReactMarkdown>
+        </div>
+      </Modal>
 
       {/* Input area */}
       <div style={{ padding: '16px', background: colors.messageBg, borderTop: `1px solid ${colors.border}`, flexShrink: 0, position: 'relative' }}>
@@ -634,7 +773,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
               }} 
             />
           </Tooltip>
-          
+
           <Input.TextArea
             ref={inputRef}
             value={inputValue}

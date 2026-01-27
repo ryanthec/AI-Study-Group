@@ -18,7 +18,9 @@ class StudyGroupMembership(Base):
     role = Column(Enum(MemberRole), default=MemberRole.MEMBER)
     joined_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc))
     is_active = Column(Boolean, default=True)
-    
+    last_viewed_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc))
+
+
     # Relationships
     user = relationship("User")
     group = relationship("StudyGroup", back_populates="memberships")
@@ -30,6 +32,7 @@ class StudyGroupMembership(Base):
             "group_id": self.group_id,
             "role": self.role.value,
             "joined_at": self.joined_at.isoformat() if self.joined_at else None,
+            "last_viewed_at": self.last_viewed_at.isoformat() if self.last_viewed_at else None,
             "is_active": self.is_active,
             "user": self.user.to_dict() if self.user else None
         }

@@ -10,3 +10,14 @@ export interface ChatMessage {
     avatar?: string;
   } | null;
 }
+
+
+// Interfaces for missed messsage count and summary responses for summarising agent
+export interface MissedCountResponse {
+    missed_count: number;
+    last_viewed: string | null;
+}
+
+export interface SummaryResponse {
+    summary: string;
+}

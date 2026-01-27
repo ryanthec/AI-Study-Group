@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ChatMessage } from '../types/message.types';
+import type { ChatMessage, MissedCountResponse, SummaryResponse } from '../types/message.types';
 
 const API_URL = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000/api/v1';
 const WS_HOST = (import.meta as any).env.VITE_WS_URL || 'ws://localhost:8000';
@@ -39,4 +39,22 @@ export const chatService = {
   sendMessage: (ws: WebSocket, content: string) => {
     ws.send(JSON.stringify({ content }));
   },
+
+  // Get missed message count
+  async getMissedCount(groupId: number): Promise<MissedCountResponse> {
+        const response = await api.get<MissedCountResponse>(`/chat/groups/${groupId}/missed_count`);
+        return response.data;
+  },
+
+  // Update user last viewed timestamp
+  async updateLastViewed(groupId: number): Promise<void> {
+      await api.post(`/chat/groups/${groupId}/update_viewed`);
+  },
+
+  // Summarise missed messages (calls summarising agent)
+  async summariseMissed(groupId: number): Promise<SummaryResponse> {
+      const response = await api.post<SummaryResponse>(`/chat/groups/${groupId}/summarise_missed`);
+      return response.data;
+  },
+
 };
