@@ -14,6 +14,7 @@ class CreateStudyGroupRequest(BaseModel):
     description: Optional[str] = Field(None, max_length=500)
     module: Optional[str] = Field(None, max_length=100)
     max_members: int = Field(default=5, ge=2, le=10)
+    is_public: bool = False
 
 
 class UpdateStudyGroupRequest(BaseModel):
@@ -21,12 +22,14 @@ class UpdateStudyGroupRequest(BaseModel):
     description: Optional[str] = Field(None, max_length=500)
     module: Optional[str] = Field(None, max_length=100)
     max_members: Optional[int] = Field(None, ge=2, le=10)
+    is_public: bool = False
 
 class StudyGroupResponse(BaseModel):
     id: int
     name: str
     description: Optional[str]
     module: Optional[str]
+    is_public: bool = False
     max_members: int
     status: str
     created_at: Optional[datetime]

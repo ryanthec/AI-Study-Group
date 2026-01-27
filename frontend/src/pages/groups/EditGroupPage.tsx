@@ -10,7 +10,9 @@ import {
   Typography,
   message,
   Space,
+  Switch,
 } from 'antd';
+import { GlobalOutlined, LockOutlined } from '@ant-design/icons';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import { studyGroupService } from '../../services/studyGroup.service';
 import type { StudyGroup, UpdateStudyGroupRequest } from '../../types/studyGroup.types';
@@ -42,6 +44,7 @@ export const EditGroupPage: React.FC = () => {
         description: data.description,
         module: data.module,
         max_members: data.max_members,
+        is_public: data.is_public,
       });
     } catch (error) {
       message.error('Failed to load group');
@@ -117,6 +120,18 @@ export const EditGroupPage: React.FC = () => {
                 max={10}
                 style={{ width: '100%' }}
               />
+            </Form.Item>
+
+            <Form.Item
+                label="Group Visibility"
+                name="is_public"
+                valuePropName="checked"
+                extra="Public groups are visible to everyone in the 'Browse Groups' page."
+            >
+                <Switch 
+                    checkedChildren={<Space><GlobalOutlined /> Public</Space>}
+                    unCheckedChildren={<Space><LockOutlined /> Private</Space>}
+                />
             </Form.Item>
 
             <Form.Item>

@@ -18,7 +18,8 @@ class StudyGroup(Base):
     name = Column(String(100), nullable=False)
     description = Column(Text)
     module = Column(String(100))
-    
+    is_public = Column(Boolean, default=False)
+
     # Group settings
     max_members = Column(Integer, default=5)
     
@@ -45,6 +46,7 @@ class StudyGroup(Base):
             "name": self.name,
             "description": self.description,
             "module": self.module,
+            "is_public": self.is_public,
             "max_members": self.max_members,
             "status": self.status.value,
             "created_at": self.created_at.isoformat() if self.created_at else None,

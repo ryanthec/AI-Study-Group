@@ -102,6 +102,7 @@ class StudyGroupService:
             name=group_data.name,
             description=group_data.description,
             module=group_data.module,
+            is_public=group_data.is_public,
             max_members=group_data.max_members,
             creator_id=creator_id
         )
@@ -332,9 +333,10 @@ class StudyGroupService:
     def search_groups(db: Session, user_id: int, query: str = "", module: str = "", page: int = 1, size: int = 10):
         offset = (page - 1) * size
         
-        # Base query for active groups
+        # Show only public and active groups
         db_query = db.query(StudyGroup).filter(
-            StudyGroup.status == StudyGroupStatus.ACTIVE
+            StudyGroup.status == StudyGroupStatus.ACTIVE,
+            StudyGroup.is_public == True
         )
         
         # Apply filters

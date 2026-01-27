@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card, Descriptions, Tag, Space, Avatar, List, Empty, Spin } from 'antd';
-import { CrownOutlined, UserOutlined } from '@ant-design/icons';
+import { CrownOutlined, UserOutlined, GlobalOutlined, LockOutlined} from '@ant-design/icons';
 import type { StudyGroup } from '../../types/studyGroup.types';
 import {useTheme} from "../../hooks/useTheme";
 
@@ -56,6 +56,15 @@ export const GroupDetailsTab: React.FC<GroupDetailsTabProps> = ({
           <Descriptions.Item label="Module">
             {group.module ? <Tag>{group.module}</Tag> : <Tag>N/A</Tag>}
           </Descriptions.Item>
+
+          <Descriptions.Item label="Visibility">
+            {group.is_public ? (
+                <Tag icon={<GlobalOutlined />} color="cyan">Public</Tag>
+            ) : (
+                <Tag icon={<LockOutlined />} color="gold">Private</Tag>
+            )}
+          </Descriptions.Item>
+
           <Descriptions.Item label="Status">
             <Tag color={group.status === 'active' ? 'green' : 'red'}>
               {group.status?.toUpperCase()}

@@ -9,7 +9,10 @@ import {
   Typography,
   message,
   Space,
+  Switch, 
+  Tooltip,
 } from 'antd';
+import { InfoCircleOutlined, LockOutlined, GlobalOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { studyGroupService } from '../../services/studyGroup.service';
 import type { CreateStudyGroupRequest } from '../../types/studyGroup.types';
@@ -95,6 +98,24 @@ export const CreateGroupPage: React.FC = () => {
                 max={10}
                 style={{ width: '100%' }}
               />
+            </Form.Item>
+
+            <Form.Item
+                label={
+                    <Space>
+                        Group Visibility
+                        <Tooltip title="Public groups appear in search results. Private groups are invite-only.">
+                            <InfoCircleOutlined style={{ color: '#8c8c8c' }} />
+                        </Tooltip>
+                    </Space>
+                }
+                name="is_public"
+                valuePropName="checked"
+            >
+                <Switch 
+                    checkedChildren={<Space><GlobalOutlined /> Public</Space>}
+                    unCheckedChildren={<Space><LockOutlined /> Private</Space>}
+                />
             </Form.Item>
 
             <Form.Item>

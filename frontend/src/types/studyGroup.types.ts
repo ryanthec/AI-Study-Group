@@ -3,6 +3,7 @@ export interface StudyGroup {
   name: string;
   description: string | null;
   module: string | null;
+  is_public: boolean;
   max_members: number;
   status: 'active' | 'completed' | 'cancelled';
   created_at: string;
@@ -18,6 +19,7 @@ export interface CreateStudyGroupRequest {
   description?: string;
   module?: string;
   max_members: number;
+  is_public?: boolean;
 }
 
 export interface UpdateStudyGroupRequest {
@@ -25,6 +27,7 @@ export interface UpdateStudyGroupRequest {
   description?: string;
   module?: string;
   max_members?: number;
+  is_public?: boolean;
 }
 
 export interface StudyGroupListResponse {
