@@ -15,6 +15,7 @@ import { AgentSettingsTab } from '../../components/studyGroup/AgentSettingsTab';
 import { ChatTab } from '../../components/studyGroup/ChatTab';
 import { DocumentsTab } from '../../components/studyGroup/DocumentsTab';
 import { QuizTab } from '../../components/studyGroup/QuizTab';
+import { FlashcardGameTab } from '../../components/studyGroup/FlashcardGameTab';
 
 
 import { VoiceChatProvider } from '../../context/VoiceChatContext';
@@ -35,7 +36,7 @@ export const GroupDetailPage: React.FC = () => {
   const { groupId } = useParams<{ groupId: string }>();
   const [group, setGroup] = useState<StudyGroup | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'details' | 'chat' | 'documents' | 'agent settings' | 'quizzes'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'chat' | 'documents' | 'agent settings' | 'quizzes' | 'games'>('details');
   const [inviteModalVisible, setInviteModalVisible] = useState(false);
   const [members, setMembers] = useState<any[]>([]);
   const [membersLoading, setMembersLoading] = useState(false);
@@ -160,6 +161,9 @@ export const GroupDetailPage: React.FC = () => {
         );
       case 'quizzes':
         return <QuizTab groupId={Number(groupId)} />;
+      
+      case 'games':
+        return <FlashcardGameTab groupId={Number(groupId)} />;
         
       case 'details':
       default:

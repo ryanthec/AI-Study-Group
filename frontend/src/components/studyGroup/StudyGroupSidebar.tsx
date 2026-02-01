@@ -13,6 +13,8 @@ import {
   RobotOutlined,
   FormOutlined,
   TeamOutlined,
+  TrophyOutlined,
+  ThunderboltOutlined,
 } from '@ant-design/icons';
 import type { StudyGroup } from '../../types/studyGroup.types';
 import { useTheme } from '../../hooks/useTheme';
@@ -21,8 +23,8 @@ import { VoiceSidebarSection } from './VoiceSidebarSection';
 interface StudyGroupSidebarProps {
   groupId: number;
   group: StudyGroup | null;
-  activeTab: 'details' | 'chat' | 'documents' | 'agent settings' | 'quizzes';
-  onTabChange: (tab: 'details' | 'chat' | 'documents' | 'agent settings' | 'quizzes') => void;
+  activeTab: 'details' | 'chat' | 'documents' | 'agent settings' | 'quizzes' | 'games';
+  onTabChange: (tab: 'details' | 'chat' | 'documents' | 'agent settings' | 'quizzes' | 'games') => void;
   onEdit?: () => void;
   onInvite?: () => void;
   onDelete?: () => void;
@@ -155,6 +157,12 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
       label: 'Practice Quizzes',
       onClick: () => onTabChange('quizzes'),
     },
+    {
+      key: 'games',
+      icon: <ThunderboltOutlined />,
+      label: 'Flashcard Battle',
+      onClick: () => onTabChange('games'),
+    }
     
   ];
 

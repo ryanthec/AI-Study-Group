@@ -8,7 +8,6 @@ from sqlalchemy.dialects.postgresql import UUID
 from ..core.database import Base
 
 class Document(Base):
-    """Stores only the metadata uploaded documents"""
     __tablename__ = "documents"
     
     id = Column(Integer, primary_key=True, index=True)
