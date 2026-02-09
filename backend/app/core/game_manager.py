@@ -12,7 +12,6 @@ class GameManager:
         self.active_games: Dict[int, List[Dict[str, Any]]] = {}
         
     async def connect(self, websocket: WebSocket, game_id: int, user_id: str, username: str):
-        await websocket.accept()
         if game_id not in self.active_games:
             self.active_games[game_id] = []
         self.active_games[game_id].append({"ws": websocket, "user_id": str(user_id), "username": username})

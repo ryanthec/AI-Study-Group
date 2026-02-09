@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Any, Union
+from typing import Any, Optional, Union
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import HTTPException, status, Depends
@@ -50,7 +50,7 @@ def get_current_user(
     
     try:
         payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        email: str = payload.get("sub")
+        email: Optional[str] = payload.get("sub")
         if email is None:
             raise credentials_exception
     except JWTError:
@@ -61,3 +61,18 @@ def get_current_user(
         raise credentials_exception
     
     return user
+
+
+def get_user_from_token(token: str, db: Session) -> Optional[User]:
+    """
+    Decodes a JWT token string and retrieves the user.
+    Useful for WebSockets where HTTPBearer headers aren't available.
+    """
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email = payload.get("sub")
+        if not isinstance(email, str):
+            return None
+        return db.query(User).filter(User.email == email).first()
+    except JWTError:
+        return None

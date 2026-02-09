@@ -7,6 +7,7 @@ export interface GameSession {
   topic: string;
   status: 'lobby' | 'in_progress' | 'finished';
   difficulty: 'easy' | 'medium' | 'hard';
+  time_limit?: number; // in seconds
   host_id: string;
 }
 
@@ -15,6 +16,7 @@ export interface CreateGameRequest {
   num_cards?: number;
   document_ids?: number[];
   difficulty: 'easy' | 'medium' | 'hard';
+  time_limit?: number; // in seconds
 }
 
 export interface CreateGameResponse {
@@ -54,6 +56,11 @@ export const gameService = {
   createGame: async (groupId: number, payload: CreateGameRequest): Promise<CreateGameResponse> => {
     const { data } = await api.post<CreateGameResponse>(`/games/groups/${groupId}/create`, payload);
     return data;
+  },
+
+  // Delete a game lobby
+  deleteGame: async (gameId: number): Promise<void> => {
+    await api.delete(`/games/${gameId}`);
   },
 
   // Create WebSocket connection for a specific game

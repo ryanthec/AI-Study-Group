@@ -1,14 +1,16 @@
 import mimetypes
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, logger
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import List, Optional
 import json
 import logging
 import asyncio
+import re
+import ast
 
-from ...core.database import get_db
-from ...core.security import get_current_user
+from ...core.database import SessionLocal, get_db
+from ...core.security import get_current_user, get_user_from_token
 from ...core.game_manager import game_manager
 from ...models.user import User
 from ...models.game import GameDifficulty, GameSession, GameParticipant, GameStatus
@@ -19,11 +21,14 @@ from ...agents.base_llm_model import BaseLLMModel
 
 router = APIRouter(prefix="/games", tags=["games"])
 
+logger = logging.getLogger(__name__)
+
 class CreateGameRequest(BaseModel):
     topic: str
     num_cards: int = 10
     document_ids: List[int] = []
     difficulty: str = "medium"
+    time_limit: int = 15
 
 # Helper to guess mime type (mime is the file type from the binary data stored in the documents table)
 def _get_mime_type(filename: str) -> str:
@@ -33,6 +38,129 @@ def _get_mime_type(filename: str) -> str:
     if filename.endswith(".docx"): return "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     return "text/plain"
 
+# Helper for LLM response JSON Parsing
+def parse_llm_json(response_text: str):
+    """
+    Robust JSON parsing for LLM outputs.
+    Handles trailing commas and Python-style dicts without breaking text content.
+    """
+    # 1. Extract content between first [ and last ]
+    match = re.search(r'\[.*\]', response_text, re.DOTALL)
+    if not match:
+        raise ValueError("No JSON list found in response")
+    
+    json_str = match.group(0)
+
+    # Attempt 1: Standard Strict JSON
+    try:
+        return json.loads(json_str)
+    except json.JSONDecodeError:
+        pass
+
+    # Attempt 2: Fix Trailing Commas (Common LLM error)
+    # Regex: Finds a comma followed by whitespace and then a closing bracket/brace
+    # Replaces ", ]" with "]"
+    try:
+        fixed_str = re.sub(r',\s*([\]}])', r'\1', json_str)
+        return json.loads(fixed_str)
+    except json.JSONDecodeError:
+        pass
+
+    # Attempt 3: Python Literal Eval (Handles single quotes correctly)
+    # We explicitly map JSON keywords to Python keywords to avoid syntax errors
+    try:
+        # Create a safe copy that maps JSON booleans/null to Python
+        # Note: We use a regex word boundary \b to avoid replacing "true" inside a word
+        py_str = json_str
+        py_str = re.sub(r'\bnull\b', 'None', py_str)
+        py_str = re.sub(r'\btrue\b', 'True', py_str)
+        py_str = re.sub(r'\bfalse\b', 'False', py_str)
+        return ast.literal_eval(py_str)
+    except (ValueError, SyntaxError):
+        pass
+
+    # If all fail, raise the original error from Attempt 1 (most descriptive)
+    return json.loads(json_str)
+
+
+# --- GAME LOOP (The System Host) ---
+async def run_game_loop(game_id: int):
+    """
+    Cycles through cards, waits for time limit, then GRADES answers in batch.
+    """
+    db = SessionLocal()
+    try:
+        session = db.query(GameSession).get(game_id)
+        if not session: return
+
+        # Start Game
+        session.status = GameStatus.IN_PROGRESS
+        session.current_card_index = 0
+        db.commit()
+
+        total_cards = len(session.cards)
+        time_limit = session.time_limit_per_card
+
+        for i in range(total_cards):
+            # 1. Update Index & Broadcast Card
+            db.refresh(session)
+            session.current_card_index = i
+            db.commit()
+            
+            current_card = session.cards[i]
+            await game_manager.send_next_card(game_id, current_card, time_limit)
+            
+            # 2. Wait for Time Limit (Players submit answers during this time)
+            await asyncio.sleep(time_limit)
+
+            # 3. Time's Up! Batch Grade Everyone
+            participants = db.query(GameParticipant).filter_by(session_id=game_id).all()
+            correct_answer = current_card["back"]
+            
+            for p in participants:
+                # Check if they answered THIS specific card
+                if p.last_answered_card_index == i:
+                    if p.last_answer == correct_answer:
+                        # Correct
+                        points = 100 + (p.streak * 10)
+                        p.score += points
+                        p.streak += 1
+                    else:
+                        # Wrong
+                        p.streak = 0
+                else:
+                    # Didn't answer
+                    p.streak = 0
+            
+            db.commit()
+
+            # 4. Broadcast Results (Leaderboard + Correct Answer)
+            leaderboard = db.query(GameParticipant).filter_by(session_id=game_id).order_by(GameParticipant.score.desc()).all()
+            lb_data = [{"username": p.user.username, "score": p.score, "user_id": str(p.user_id)} for p in leaderboard]
+            
+            await game_manager.send_round_result(game_id, correct_answer, lb_data)
+
+            # 5. Intermission / Result Screen Delay
+            # FIX: Wait after EVERY card, including the last one
+            if i < total_cards - 1:
+                await asyncio.sleep(5) # Normal intermission
+            else:
+                await asyncio.sleep(10) # Longer wait for the final question's result
+        
+        # Finish Game
+        session.status = GameStatus.LOBBY
+        session.current_card_index = -1
+        db.commit()
+        
+        leaderboard = db.query(GameParticipant).filter_by(session_id=game_id).order_by(GameParticipant.score.desc()).all()
+        lb_data = [{"username": p.user.username, "score": p.score, "user_id": str(p.user_id)} for p in leaderboard]
+        await game_manager.broadcast(game_id, {"type": "game_over", "leaderboard": lb_data})
+
+    except Exception as e:
+        logger.error(f"Error in game loop {game_id}: {e}")
+    finally:
+        db.close()
+        
 @router.post("/groups/{group_id}/create")
 async def create_game(
     group_id: int,
@@ -124,13 +252,14 @@ async def create_game(
             attachments=uploaded_files,
             max_output_tokens=4000
         )
-        
-        clean_json = response.replace("```json", "").replace("```", "").strip()
-        cards = json.loads(clean_json)
+
+        cards = parse_llm_json(response)
         
     except Exception as e:
-        logger.error(f"LLM Generation failed: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to generate game content")
+        logger.error(f"LLM Generation/Parsing failed: {str(e)}")
+        # Log the raw response to help debug if it happens again
+        logger.error(f"Raw Response causing error: {locals().get('response', 'No response')}")
+        raise HTTPException(status_code=500, detail="Failed to generate valid game content. Please try again.")
 
     # 4. Create Game Session
     session = GameSession(
@@ -139,6 +268,7 @@ async def create_game(
         topic=request.topic,
         difficulty=GameDifficulty(request.difficulty.lower()),
         status=GameStatus.LOBBY,
+        time_limit_per_card=request.time_limit,
         cards=cards,
         current_card_index=-1
     )
@@ -154,20 +284,57 @@ def list_active_games(group_id: int, db: Session = Depends(get_db)):
         GameSession.study_group_id == group_id,
         GameSession.status != GameStatus.FINISHED
     ).all()
-    return [{"id": g.id, "topic": g.topic, "status": g.status.value, "host_id": str(g.host_id)} for g in games]
+    return [{
+        "id": g.id, 
+        "topic": g.topic, 
+        "status": g.status.value, 
+        "difficulty": g.difficulty.value,
+        "time_limit": g.time_limit_per_card,
+        "host_name": g.host.username,
+        "host_id": str(g.host_id) #Send UUID also just in case
+    } for g in games]
 
-@router.websocket("/{game_id}/ws")
-async def game_websocket(
-    websocket: WebSocket,
+
+@router.delete("/{game_id}")
+def delete_game(
     game_id: int,
-    token: str,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # (Add Token Validation here similar to chat.py)
-    # ... assuming 'user' is valid ...
-    user = ... # Retrieve user from token
+    game = db.query(GameSession).get(game_id)
+    if not game:
+        raise HTTPException(status_code=404, detail="Game not found")
+        
+    # Check permissions: Host OR Group Admin
+    # We need to check if user is admin of the study group
+    membership = db.query(StudyGroupMembership).filter(
+        StudyGroupMembership.group_id == game.study_group_id,
+        StudyGroupMembership.user_id == current_user.id
+    ).first()
     
-    # Add to DB participant if not exists
+    is_host = str(game.host_id) == str(current_user.id)
+    is_admin = membership and (membership.role == "admin")
+    
+    if not (is_host or is_admin):
+        raise HTTPException(status_code=403, detail="Not authorized to delete this game")
+        
+    db.delete(game)
+    db.commit()
+    return {"message": "Game deleted successfully"}
+
+
+@router.websocket("/{game_id}/ws")
+async def game_websocket(websocket: WebSocket, game_id: int, db: Session = Depends(get_db)):
+    await websocket.accept()
+    token = websocket.query_params.get("token")
+    if not token: 
+        await websocket.close(code=1008)
+        return
+    user = get_user_from_token(token, db)
+    if not user: 
+        await websocket.close(code=1008)
+        return
+
     participant = db.query(GameParticipant).filter_by(session_id=game_id, user_id=user.id).first()
     if not participant:
         participant = GameParticipant(session_id=game_id, user_id=user.id)
@@ -181,54 +348,24 @@ async def game_websocket(
             data = await websocket.receive_json()
             action = data.get("action")
             
-            # --- HOST: START GAME ---
             if action == "start_game":
                 session = db.query(GameSession).get(game_id)
                 if str(session.host_id) == str(user.id):
-                    session.status = GameStatus.IN_PROGRESS
-                    session.current_card_index = 0
-                    db.commit()
-                    # Send First Card
-                    await game_manager.send_next_card(game_id, session.cards[0])
+                    asyncio.create_task(run_game_loop(game_id))
 
-            # --- PLAYER: SUBMIT ANSWER ---
             elif action == "answer":
                 answer = data.get("value")
                 session = db.query(GameSession).get(game_id)
-                current_card = session.cards[session.current_card_index]
-                
-                # Check correctness
-                if answer == current_card["back"]:
-                    # Calculate points based on speed (mock logic)
-                    points = 100 + (participant.streak * 10)
-                    participant.score += points
-                    participant.streak += 1
-                else:
-                    participant.streak = 0
-                db.commit()
 
-            # --- HOST: NEXT CARD ---
-            elif action == "next_card":
-                # Host triggers next card manually or after timer
-                session = db.query(GameSession).get(game_id)
+                # Refresh session to get the updates from background thread
+                db.refresh(session)
+                # Also ensure we are writing to a fresh participant object
+                db.refresh(participant)
                 
-                # 1. Send results of previous round
-                leaderboard = db.query(GameParticipant).filter_by(session_id=game_id).order_by(GameParticipant.score.desc()).all()
-                lb_data = [{"username": p.user.username, "score": p.score} for p in leaderboard]
-                prev_card = session.cards[session.current_card_index]
-                await game_manager.send_round_result(game_id, prev_card["back"], lb_data)
-                
-                # 2. Advance index
-                session.current_card_index += 1
-                if session.current_card_index < len(session.cards):
-                    db.commit()
-                    # Small delay then send next card
-                    await asyncio.sleep(3) 
-                    await game_manager.send_next_card(game_id, session.cards[session.current_card_index])
-                else:
-                    session.status = GameStatus.FINISHED
-                    db.commit()
-                    await game_manager.broadcast(game_id, {"type": "game_over", "leaderboard": lb_data})
+                # Update temporary answer field
+                participant.last_answer = answer
+                participant.last_answered_card_index = session.current_card_index
+                db.commit()
 
     except WebSocketDisconnect:
         game_manager.disconnect(websocket, game_id)

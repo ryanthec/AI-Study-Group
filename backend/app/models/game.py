@@ -25,6 +25,7 @@ class GameSession(Base):
     status = Column(Enum(GameStatus), default=GameStatus.LOBBY)
     difficulty = Column(Enum(GameDifficulty), default=GameDifficulty.MEDIUM)
     topic = Column(String(200))
+    time_limit_per_card = Column(Integer, default=15)
     
     # Store flashcards as JSON: 
     # [{ "id": 1, "front": "Term", "back": "Definition", "options": ["Def A", "Def B", "Def C", "Def D"] }]
@@ -46,6 +47,9 @@ class GameParticipant(Base):
     
     score = Column(Integer, default=0)
     streak = Column(Integer, default=0) # For bonus points
+    
+    last_answered_card_index = Column(Integer, default=-1)
+    last_answer = Column(String, nullable=True)
     
     session = relationship("GameSession", back_populates="participants")
     user = relationship("User")

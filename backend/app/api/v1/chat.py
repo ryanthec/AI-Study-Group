@@ -11,7 +11,7 @@ from jose import jwt, JWTError
 # Core and services
 from ...core.database import get_db
 from ...core.websocket_manager import manager
-from ...core.security import get_current_user
+from ...core.security import get_current_user, get_user_from_token
 from ...services.message_service import MessageService
 from ...services.study_group_service import StudyGroupService
 from ...services.rag_service import rag_service
@@ -34,13 +34,13 @@ from ...agents.summarising_agent import SummarisingAgent
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
-# 1. Singleton LLM Client (Keeps connections/session cache efficient)
+# Singleton LLM Client (Keeps connections/session cache efficient)
 base_llm = BaseLLMModel()
 
 # Summarising Agent instance
 summarising_agent = SummarisingAgent(base_llm)
 
-# 2. Factory to create TeachingAssistantAgent instances
+# Factory to create TeachingAssistantAgent instances
 def get_agent_for_group(group_id: int, db: Session) -> TeachingAssistantAgent:
     """
     Factory: Creates Agent instance using DB configuration.
@@ -55,16 +55,6 @@ def get_agent_for_group(group_id: int, db: Session) -> TeachingAssistantAgent:
         config=config # Pass the DB-loaded config
     )
 
-def get_user_from_token(token: str, db: Session) -> User | None:
-    try:
-        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
-        email = payload.get("sub")
-        if not isinstance(email, str):
-            return None
-        return db.query(User).filter(User.email == email).first()
-    except JWTError as e:
-        print(f"[WS] JWT decode failed: {e}")
-        return None
 
 def detect_ai_mention(content: str) -> bool:
     """Check if message mentions @TeachingAI"""
