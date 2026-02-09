@@ -1,13 +1,18 @@
 import mimetypes
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
-from typing import List, Optional
+from typing import Dict, List, Optional
 import json
 import logging
 import asyncio
+import httpx
+import html
 import re
 import ast
+import random
+
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from sqlalchemy.orm import Session
+from pydantic import BaseModel
+
 
 from ...core.database import SessionLocal, get_db
 from ...core.security import get_current_user, get_user_from_token
@@ -23,12 +28,20 @@ router = APIRouter(prefix="/games", tags=["games"])
 
 logger = logging.getLogger(__name__)
 
+# --- In-Memory Session Token Store for Trivia questions---
+# Map: user_id -> session_token
+# Session tokens are sent with the API request to avoid getting duplicate questions
+opentdb_tokens: Dict[str, str] = {}
+
+
 class CreateGameRequest(BaseModel):
     topic: str
     num_cards: int = 10
     document_ids: List[int] = []
     difficulty: str = "medium"
     time_limit: int = 15
+    mode: str = "study" # 'study' or 'trivia'
+    trivia_category: Optional[str] = None # OpenTDB Category ID
 
 # Helper to guess mime type (mime is the file type from the binary data stored in the documents table)
 def _get_mime_type(filename: str) -> str:
@@ -81,6 +94,88 @@ def parse_llm_json(response_text: str):
 
     # If all fail, raise the original error from Attempt 1 (most descriptive)
     return json.loads(json_str)
+
+
+# --- OpenTDB Logic ---
+# Credit for API from open trivia db: https://opentdb.com/api_config.php
+async def fetch_opentdb_token(user_id: str) -> str:
+    """Gets or refreshes a session token for the user."""
+    if user_id in opentdb_tokens:
+        return opentdb_tokens[user_id]
+    
+    async with httpx.AsyncClient() as client:
+        resp = await client.get("https://opentdb.com/api_token.php?command=request")
+        data = resp.json()
+        if data['response_code'] == 0:
+            token = data['token']
+            opentdb_tokens[user_id] = token
+            return token
+        else:
+            logger.error(f"Failed to get OpenTDB token: {data}")
+            return ""
+
+async def reset_opentdb_token(user_id: str, token: str):
+    """Resets the token if questions are exhausted."""
+    async with httpx.AsyncClient() as client:
+        await client.get(f"https://opentdb.com/api_token.php?command=reset&token={token}")
+
+async def fetch_trivia_questions(amount: int, category: Optional[str], difficulty: str, user_id: str):
+    token = await fetch_opentdb_token(user_id)
+    
+    # Map difficulty to OpenTDB format (easy, medium, hard)
+    diff_param = difficulty.lower()
+    
+    url = f"https://opentdb.com/api.php?amount={amount}&type=multiple&difficulty={diff_param}"
+    if category and category != "any":
+        url += f"&category={category}"
+    if token:
+        url += f"&token={token}"
+        
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(url)
+        data = resp.json()
+        
+        # Handle Response Codes
+        code = data.get('response_code', 0)
+        
+        # Code 4: Token Empty (Exhausted questions). Reset and retry once.
+        if code == 4 and token:
+            logger.info(f"OpenTDB Token exhausted for user {user_id}. Resetting...")
+            await reset_opentdb_token(user_id, token)
+            # Retry call
+            resp = await client.get(url)
+            data = resp.json()
+            
+        # Code 3: Token Not Found. Clear and retry with new token.
+        elif code == 3:
+            if user_id in opentdb_tokens: del opentdb_tokens[user_id]
+            token = await fetch_opentdb_token(user_id)
+            url = url.replace(f"&token={opentdb_tokens.get(user_id, '')}", f"&token={token}")
+            resp = await client.get(url)
+            data = resp.json()
+
+        if data.get('response_code') != 0:
+            raise HTTPException(status_code=500, detail=f"Failed to fetch trivia: Code {data.get('response_code')}")
+
+        # Format Questions to match our Game Card structure
+        formatted_cards = []
+        for item in data.get('results', []):
+            # Decode HTML entities (e.g. &quot; -> ")
+            question_text = html.unescape(item['question'])
+            correct_answer = html.unescape(item['correct_answer'])
+            incorrect_answers = [html.unescape(ans) for ans in item['incorrect_answers']]
+            
+            # Create Options List
+            options = incorrect_answers + [correct_answer]
+            random.shuffle(options)
+            
+            formatted_cards.append({
+                "front": question_text,
+                "back": correct_answer,
+                "options": options
+            })
+            
+        return formatted_cards
 
 
 # --- GAME LOOP (The System Host) ---
@@ -175,32 +270,42 @@ async def create_game(
     ).first()
     if not membership:
         raise HTTPException(status_code=403, detail="Not a member of this group")
-
-    # 2. Retrieve and Upload Documents
-    # We must retrieve the 'file_data' (bytes) and upload to Gemini
-    uploaded_files = []
     
-    if request.document_ids:
-        docs = db.query(Document).filter(
-            Document.id.in_(request.document_ids),
-            Document.group_id == group_id
-        ).all()
-        
-        llm_client = BaseLLMModel()
+    #2. Fetch or Generate Cards based on Mode
+    cards = []
+    
+    # --- MODE 1: TRIVIA (OpenTDB) ---
+    if request.mode == "trivia":
+        try:
+            cards = await fetch_trivia_questions(
+                amount=request.num_cards,
+                category=request.trivia_category,
+                difficulty=request.difficulty,
+                user_id=str(current_user.id)
+            )
+        except Exception as e:
+            logger.error(f"Trivia fetch failed: {e}")
+            raise HTTPException(status_code=500, detail="Failed to fetch trivia questions. Try a different category.")
 
-        for doc in docs:
-            if doc.file_data:
-                mime_type = _get_mime_type(doc.filename)
-                try:
-                    # Use the helper from BaseLLMModel to upload bytes
-                    file_ref = llm_client.upload_file_from_bytes(
-                        file_bytes=doc.file_data,
-                        mime_type=mime_type,
-                        display_name=doc.filename
-                    )
-                    uploaded_files.append(file_ref)
-                except Exception as e:
-                    logger.error(f"Failed to upload document {doc.filename}: {e}")
+    # --- MODE 2: STUDY (LLM + Documents) ---
+    uploaded_files = []
+    if request.mode != "trivia":
+        if request.document_ids:
+            docs = db.query(Document).filter(
+                Document.id.in_(request.document_ids),
+                Document.group_id == group_id
+            ).all()
+            llm_client = BaseLLMModel()
+            for doc in docs:
+                if doc.file_data:
+                    mime_type = _get_mime_type(doc.filename)
+                    try:
+                        file_ref = llm_client.upload_file_from_bytes(
+                            file_bytes=doc.file_data, mime_type=mime_type, display_name=doc.filename
+                        )
+                        uploaded_files.append(file_ref)
+                    except Exception as e:
+                        logger.error(f"Failed to upload doc: {e}")
 
     # 3. Generate Flashcards using LLM with File Context
     llm = BaseLLMModel()
@@ -265,7 +370,7 @@ async def create_game(
     session = GameSession(
         study_group_id=group_id,
         host_id=current_user.id,
-        topic=request.topic,
+        topic=request.topic, # For Trivia, this will be the Category Name passed from frontend or generic
         difficulty=GameDifficulty(request.difficulty.lower()),
         status=GameStatus.LOBBY,
         time_limit_per_card=request.time_limit,

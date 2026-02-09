@@ -16,7 +16,9 @@ export interface CreateGameRequest {
   num_cards?: number;
   document_ids?: number[];
   difficulty: 'easy' | 'medium' | 'hard';
-  time_limit?: number; // in seconds
+  time_limit: number;
+  mode?: 'study' | 'trivia'; // NEW
+  trivia_category?: string;  // NEW
 }
 
 export interface CreateGameResponse {
