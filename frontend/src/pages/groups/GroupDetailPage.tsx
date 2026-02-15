@@ -1,6 +1,6 @@
 // React and libraries
 import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useBlocker } from 'react-router-dom';
 import { Layout, Button, message, Modal, Spin } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 
@@ -42,10 +42,61 @@ export const GroupDetailPage: React.FC = () => {
   const [membersLoading, setMembersLoading] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState<any[]>([]);
 
+  // Game Guard States
+  const [isGameActive, setIsGameActive] = useState(false);
+  const [pendingTab, setPendingTab] = useState<any>(null); // For tab switching
+  const [isModalVisible, setIsModalVisible] = useState(false);
+
+  // ROUTE BLOCKER (Navbar/Back Button)
+  // Blocks navigation if game is active. Returns a 'blocker' object.
+  // Note: Requires Data Router (createBrowserRouter) setup in App.tsx. 
+  // If using legacy BrowserRouter, this might not fire, but Tab Guard will still work.
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      isGameActive && currentLocation.pathname !== nextLocation.pathname
+  );
+
+  useEffect(() => {
+    if (blocker.state === "blocked") {
+      setIsModalVisible(true);
+    }
+  }, [blocker.state]);
+
+  const handleConfirmExit = () => {
+    setIsGameActive(false); // Disable guard
+    setIsModalVisible(false);
+    
+    // Resume Navigation
+    if (blocker.state === "blocked") {
+      blocker.proceed();
+    } else if (pendingTab) {
+      setActiveTab(pendingTab);
+      setPendingTab(null);
+    }
+  };
+
+  const handleCancelExit = () => {
+    setIsModalVisible(false);
+    setPendingTab(null);
+    if (blocker.state === "blocked") {
+      blocker.reset();
+    }
+  };
+
+  // --- TAB GUARD (Sidebar) ---
+  const handleTabChange = (tab: any) => {
+    if (isGameActive && tab !== 'games') {
+      setPendingTab(tab);
+      setIsModalVisible(true);
+    } else {
+      setActiveTab(tab);
+    }
+  };
+
+
   useEffect(() => {
     if (groupId) {
       loadGroup();
-      // loadMembers();
     }
   }, [groupId]);
 
@@ -62,34 +113,6 @@ export const GroupDetailPage: React.FC = () => {
       setLoading(false);
     }
   };
-
-  // const loadMembers = async () => {
-  //   try {
-  //     setMembersLoading(true);
-  //     const membersList = await studyGroupService.getGroupMembers(Number(groupId));
-  //     setMembers(membersList);
-  //     // Count online members
-  //     const onlineCount = membersList.filter((m: any) => m.isOnline).length;
-  //     setOnlineMembers(onlineCount);
-  //   } catch (error) {
-  //     console.log('Could not load members', error);
-  //   } finally {
-  //     setMembersLoading(false);
-  //   }
-  // };
-
-   // Silent refresh without showing loading spinner
-  // const loadMembersQuietly = async () => {
-  //   try {
-  //     const membersList = await studyGroupService.getGroupMembers(Number(groupId));
-  //     setMembers(membersList);
-  //     const onlineCount = membersList.filter((m: any) => m.isOnline).length;
-  //     setOnlineMembers(onlineCount);
-  //   } catch (error) {
-  //     // Silently fail - don't show error to user
-  //     console.log('Background member refresh failed', error);
-  //   }
-  // };
 
   const handleLeave = () => {
     Modal.confirm({
@@ -133,8 +156,19 @@ export const GroupDetailPage: React.FC = () => {
   };
 
   const handleBackToGroups = () => {
-    navigate('/groups');
-  }
+    if (isGameActive) {
+        // Trigger the blocker logic manually or just use the modal directly
+        Modal.confirm({
+            title: 'Leave Game?',
+            content: 'If you leave now, your progress will be lost.',
+            okText: 'Leave',
+            okType: 'danger',
+            onOk: () => navigate('/groups')
+        });
+    } else {
+        navigate('/groups');
+    }
+  };
 
   const renderContent = () => {
     switch (activeTab) {
@@ -163,7 +197,9 @@ export const GroupDetailPage: React.FC = () => {
         return <QuizTab groupId={Number(groupId)} />;
       
       case 'games':
-        return <FlashcardGameTab groupId={Number(groupId)} />;
+        return <FlashcardGameTab 
+                groupId={Number(groupId)} 
+                setGameActive={setIsGameActive} />;
         
       case 'details':
       default:
@@ -195,7 +231,7 @@ export const GroupDetailPage: React.FC = () => {
           groupId={Number(groupId)}
           group={group}
           activeTab={activeTab}
-          onTabChange={setActiveTab}
+          onTabChange={handleTabChange}
           onEdit={handleEdit}
           onInvite={() => setInviteModalVisible(true)}
           onDelete={handleDelete}
@@ -243,6 +279,24 @@ export const GroupDetailPage: React.FC = () => {
           }}
         />
       )}
+
+      {/* GAME EXIT CONFIRMATION MODAL */}
+      <Modal
+        title="Leave Game?"
+        open={isModalVisible}
+        onOk={handleConfirmExit}
+        onCancel={handleCancelExit}
+        okText="Leave"
+        cancelText="Stay"
+        okButtonProps={{ danger: true }}
+        styles={{ 
+            mask: { backdropFilter: 'blur(4px)' }
+        }}
+      >
+        <p>You are currently in an active game. If you leave now, your progress will not be saved.</p>
+      </Modal>
+
+      
       </VoiceChatProvider>
     </>
   );

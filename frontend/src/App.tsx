@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, createBrowserRouter, RouterProvider} from 'react-router-dom';
 import { ConfigProvider, App as AntApp } from 'antd';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
@@ -68,112 +68,105 @@ const PublicRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return <>{children}</>;
 };
 
-// Main App Component
-const AppContent: React.FC = () => {
-  return (
-    <Router>
-      <Routes>
-        {/* Public Routes */}
-        <Route
-          path="/login"
-          element={
-            <PublicRoute>
-              <LoginPage />
-            </PublicRoute>
-          }
-        />
-        <Route
-          path="/register"
-          element={
-            <PublicRoute>
-              <RegisterPage />
-            </PublicRoute>
-          }
-        />
-
-        {/* Protected Routes */}
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <DashboardPage />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/profile"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <AccountDetailsPage />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route
-          path="/groups"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <MyGroupsPage />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/groups/browse"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <BrowseGroupsPage />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/groups/create"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <CreateGroupPage />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/groups/:groupId"
-          element={
-            <ProtectedRoute>
-              <GroupDetailPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/groups/:groupId/edit"
-          element={
-            <ProtectedRoute>
-              <Layout>
-                <EditGroupPage />
-              </Layout>
-            </ProtectedRoute>
-          }
-        />
-
-        <Route path="/invitations/accept" element={<AcceptInvitationPage />} />
-
-        {/* Default redirect */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-
-        {/* Catch all - redirect to login */}
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
-    </Router>
-  );
-};
+// Define Router Configuration using Data API
+const router = createBrowserRouter([
+  {
+    path: "/login",
+    element: (
+      <PublicRoute>
+        <LoginPage />
+      </PublicRoute>
+    ),
+  },
+  {
+    path: "/register",
+    element: (
+      <PublicRoute>
+        <RegisterPage />
+      </PublicRoute>
+    ),
+  },
+  {
+    path: "/dashboard",
+    element: (
+      <ProtectedRoute>
+        <Layout>
+          <DashboardPage />
+        </Layout>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/profile",
+    element: (
+      <ProtectedRoute>
+        <Layout>
+          <AccountDetailsPage />
+        </Layout>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/groups",
+    element: (
+      <ProtectedRoute>
+        <Layout>
+          <MyGroupsPage />
+        </Layout>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/groups/browse",
+    element: (
+      <ProtectedRoute>
+        <Layout>
+          <BrowseGroupsPage />
+        </Layout>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/groups/create",
+    element: (
+      <ProtectedRoute>
+        <Layout>
+          <CreateGroupPage />
+        </Layout>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/groups/:groupId",
+    element: (
+      <ProtectedRoute>
+        <GroupDetailPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/groups/:groupId/edit",
+    element: (
+      <ProtectedRoute>
+        <Layout>
+          <EditGroupPage />
+        </Layout>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "/invitations/accept",
+    element: <AcceptInvitationPage />,
+  },
+  {
+    path: "/",
+    element: <Navigate to="/dashboard" replace />,
+  },
+  {
+    path: "*",
+    element: <Navigate to="/login" replace />,
+  },
+]);
 
 const App: React.FC = () => {
   return (
@@ -181,7 +174,7 @@ const App: React.FC = () => {
       <QueryClientProvider client={queryClient}>
         <AntApp>
           <AuthProvider>
-            <AppContent />
+            <RouterProvider router={router} />
             <Toaster
               position="top-right"
               toastOptions={{

@@ -10,7 +10,12 @@ import axios from 'axios';
 const { Title, Text } = Typography;
 const { Option } = Select;
 
-export const FlashcardGameTab = ({ groupId }: { groupId: number }) => {
+interface FlashcardGameTabProps {
+    groupId: number;
+    setGameActive: (active: boolean) => void;
+}
+
+export const FlashcardGameTab = ({ groupId, setGameActive }: FlashcardGameTabProps) => {
   const { user } = useAuth();
   const { isDark } = useTheme(); 
   
@@ -51,10 +56,20 @@ export const FlashcardGameTab = ({ groupId }: { groupId: number }) => {
   const cardBg = isDark ? '#1f1f1f' : '#fff';
   const leaderboardItemBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.6)';
 
+  // Update parent state on game status change
+  useEffect(() => {
+    if (gameState === 'lobby' || gameState === 'playing' || gameState === 'result') {
+        setGameActive(true);
+    } else {
+        setGameActive(false);
+    }
+  }, [gameState, setGameActive]);
+
   // --- Cleanup ---
   useEffect(() => {
     return () => {
       leaveGame();
+      setGameActive(false); // Ensure guard is disabled on unmount
     };
   }, []);
 
