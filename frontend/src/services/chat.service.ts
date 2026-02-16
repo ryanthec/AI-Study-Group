@@ -19,9 +19,9 @@ api.interceptors.request.use((config) => {
 
 export const chatService = {
   // Get message history
-  getMessages: async (groupId: number, limit = 100, offset = 0): Promise<ChatMessage[]> => {
+  getMessages: async (groupId: number, limit = 100, offset = 0, mode: 'public' | 'private' = 'public'): Promise<ChatMessage[]> => {
     const { data } = await api.get(`/chat/${groupId}/messages`, {
-      params: { limit, offset },
+      params: { limit, offset, mode },
     });
     return data;
   },
@@ -35,9 +35,20 @@ export const chatService = {
     return new WebSocket(url);
   },
 
+  // Extract context from file (for private tutor)
+  extractContext: async (file: File): Promise<{ filename: string; content: string }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const { data } = await api.post('/chat/extract_context', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return data;
+  },
+
   // Send message via WebSocket
-  sendMessage: (ws: WebSocket, content: string) => {
-    ws.send(JSON.stringify({ content }));
+  sendMessage: (ws: WebSocket, content: string, mode: 'public' | 'private' = 'public', 
+    quizAttemptId?: number, temporaryContext?: Array<{ title: string; content: string }>) => {
+    ws.send(JSON.stringify({ content, mode, quiz_attempt_id: quizAttemptId, temporary_context: temporaryContext }));
   },
 
   // Get missed message count

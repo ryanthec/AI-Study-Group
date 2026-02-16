@@ -4,6 +4,7 @@ export interface ChatMessage {
   content: string;
   message_type: 'text' | 'system' | 'ai_response';
   created_at: string;
+  is_private: boolean;
   user: {
     id: string;
     username: string;

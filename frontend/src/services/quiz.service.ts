@@ -30,6 +30,7 @@ export interface CreateQuizRequest {
 }
 
 export interface QuizAttemptSummary {
+    id: number;
     score: number;
     total_questions: number;
     passed: boolean;

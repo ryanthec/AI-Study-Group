@@ -227,13 +227,17 @@ export const QuizTab: React.FC<{ groupId: number }> = ({ groupId }) => {
           </Tooltip>
 
           {(user?.id && record.creator_name.includes(user.firstName)) && (
-            <Button 
-                danger 
-                type="text" 
-                size="small"
-                icon={<DeleteOutlined />} 
-                onClick={() => handleDelete(record.id)}
-            />
+            <Tooltip title={"Delete quiz"}>
+              <Button 
+                  danger 
+                  type="text" 
+                  size="small"
+                  icon={<DeleteOutlined />} 
+                  onClick={() => handleDelete(record.id)}
+              >
+                  Delete
+              </Button>
+            </Tooltip>
           )}
         </Space>
       ),
@@ -311,7 +315,7 @@ export const QuizTab: React.FC<{ groupId: number }> = ({ groupId }) => {
             </Form.Item>
 
             <Form.Item name="document_ids" label={<span style={{ color: colors.text }}>Source Documents</span>}>
-                <Select mode="multiple" placeholder="Select documents (optional)">
+                <Select mode="multiple" placeholder="Select documents">
                     {documents.map(doc => (
                         <Select.Option key={doc.id} value={doc.id}>{doc.filename}</Select.Option>
                     ))}

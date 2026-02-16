@@ -1,6 +1,9 @@
 from sqlalchemy.orm import Session, defer
 from typing import List, Optional
 import os
+import io
+import PyPDF2
+import docx
 from pathlib import Path
 from datetime import datetime
 
@@ -40,6 +43,38 @@ class DocumentService:
             start = end - overlap
         
         return chunks
+    
+    @staticmethod
+    def extract_text_from_bytes(filename: str, file_data: bytes) -> str:
+        """
+        Extract text content from file bytes without saving to DB.
+        """
+        content = ""
+        filename = filename.lower()
+        
+        try:
+            if filename.endswith('.pdf'):
+                pdf_file = io.BytesIO(file_data)
+                reader = PyPDF2.PdfReader(pdf_file)
+                for page in reader.pages:
+                    text = page.extract_text()
+                    if text:
+                        content += text + "\n"
+                        
+            elif filename.endswith('.docx'):
+                docx_file = io.BytesIO(file_data)
+                doc = docx.Document(docx_file)
+                for para in doc.paragraphs:
+                    content += para.text + "\n"
+                    
+            elif filename.endswith('.txt') or filename.endswith('.md'):
+                content = file_data.decode('utf-8', errors='ignore')
+                
+        except Exception as e:
+            print(f"Error extracting text from {filename}: {str(e)}")
+            return f"[Error extracting text: {str(e)}]"
+            
+        return content
     
     @staticmethod
     def process_document(

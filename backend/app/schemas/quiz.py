@@ -11,10 +11,13 @@ class QuizCreateRequest(BaseModel):
     scope: str = "group" # 'group' or 'personal'
 
 class QuizAttemptSummary(BaseModel):
+    id: int
     score: int
     total_questions: int
     passed: bool
     completed_at: str
+    class Config:
+        from_attributes = True
 
 
 class QuizAttemptRequest(BaseModel):

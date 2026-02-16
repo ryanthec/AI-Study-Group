@@ -1,24 +1,18 @@
 import React, { useEffect, useState, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
-import { Input, Button, Card, Avatar, Typography, Space, Tag, Spin, Tooltip, AutoComplete, Divider, message, notification, Modal} from 'antd';
+import { Input, Button, Card, Avatar, Typography, Space, Tag, Spin, Tooltip, Segmented, Divider, message, notification, Modal, Popover, List, Empty} from 'antd';
 import {
-  SendOutlined,
-  UserOutlined,
-  RobotOutlined,
-  PaperClipOutlined,
-  LoadingOutlined,
-  FileTextOutlined,
-  BulbOutlined,
-  ReadOutlined, 
-  CloseOutlined,
-  CopyOutlined,
+  SendOutlined, UserOutlined, RobotOutlined, PaperClipOutlined, LoadingOutlined, FileTextOutlined, BulbOutlined, ReadOutlined, 
+  CloseOutlined, CopyOutlined, UploadOutlined, FilePdfOutlined, FileWordOutlined, FileOutlined, FileUnknownOutlined, TrophyOutlined,
+  PlusOutlined
 } from '@ant-design/icons';
 
 import { useAuth } from '../../hooks/useAuth';
 import { useTheme } from '../../hooks/useTheme';
 import { studyGroupService } from '../../services/studyGroup.service';
 import { chatService } from '../../services/chat.service';
+import { quizService, Quiz } from '../../services/quiz.service';
 import { agentConfigService, AgentConfig } from '../../services/agentConfig.service';
 import type { ChatMessage } from '../../types/message.types';
 
@@ -35,9 +29,27 @@ interface StreamingMessage {
   isStreaming: boolean;
 }
 
+interface PendingAttachment {
+    id: string;
+    type: 'file' | 'quiz';
+    title: string;
+    data: any; // File object or Quiz object
+    icon?: React.ReactNode;
+}
+
 export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }) => {
   const { user } = useAuth();
   const { isDark } = useTheme();
+
+  // Chat mode state and ref
+  const [chatMode, setChatMode] = useState<'public' | 'private'>('public'); // 'public' = Group Chat, 'private' = My Tutor
+  const chatModeRef = useRef(chatMode);
+
+  // Sync Ref with State
+  useEffect(() => {
+    chatModeRef.current = chatMode;
+  }, [chatMode]);
+
 
   // Messages and connection states
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -60,6 +72,15 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
   // useStates & refs for document file upload
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Pending Attachments State
+  const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
+
+  // Modals & Menus
+  const [isAttachMenuOpen, setIsAttachMenuOpen] = useState(false);
+  const [isQuizModalOpen, setIsQuizModalOpen] = useState(false);
+  const [availableQuizzes, setAvailableQuizzes] = useState<Quiz[]>([]);
+  const [quizzesLoading, setQuizzesLoading] = useState(false);
 
   // useStates for Summary
   const [showSummaryPrompt, setShowSummaryPrompt] = useState(false);
@@ -90,10 +111,9 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
     offlineRed: '#f23f43',
     // Agent Settings Toggle Button Colors
     activeRag: '#1890ff',
-    activeSocratic: '#722ed1'
+    activeSocratic: '#722ed1',
+    chipBg: isDark ? '#2b2d31' : '#e6e6e6',
   };
-
-  
 
   const isOpen = () => readyRef.current;
 
@@ -101,27 +121,9 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
 
 
-  // useEffect to load message history and setup WebSocket
+  // WEBSOCKET CONNECTION
   useEffect(() => {
     let cancelled = false;
-
-    const load = async () => {
-      try {
-        setLoading(true);
-
-        // Load message history
-        const history = await chatService.getMessages(groupId);
-        if (!cancelled) setMessages(history);
-
-        // Load agent config
-        const config = await agentConfigService.getAgentConfig(groupId);
-        if (!cancelled) setAgentConfig(config);
-
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    load();
 
     if (!wsRef.current) {
       const ws = chatService.connectWebSocket(groupId);
@@ -129,25 +131,22 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
       readyRef.current = false;
 
       ws.onopen = () => {
+        if (cancelled) return;
         readyRef.current = true;
         setConnected(true);
-        // Signal to server that client is ready to receive messages
         ws.send(JSON.stringify({ type: 'client_ready' }));
       };
 
       ws.onmessage = (e) => {
+        if (cancelled) return;
         try {
           const data = JSON.parse(e.data);
           
           if (data.type === 'online_users_update') {
-            // Pass the list of users to the parent
-            if (onOnlineUsersUpdate) {
-              onOnlineUsersUpdate(data.users);
-            }
+            onOnlineUsersUpdate?.(data.users);
             return;
           }
 
-          // Handle AI typing indicator
           if (data.type === 'ai_typing') {
             setStreamingMessage({
               id: `streaming_${Date.now()}`,
@@ -158,40 +157,40 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
             return;
           }
           
-          // Handle AI streaming chunks
           if (data.type === 'ai_stream') {
             setStreamingMessage((prev) => {
               if (!prev) return null;
-              return {
-                ...prev,
-                content: prev.content + data.content,
-              };
+              return { ...prev, content: prev.content + data.content };
             });
             setTimeout(() => scrollToBottom(), 0);
             return;
           }
 
-          // Handle AI stream complete
-          if (data.type === 'ai_complete') {
-            const aiMsg: ChatMessage = data.message;
-            setMessages((prev) => [...prev, aiMsg]);
-            setStreamingMessage(null);
-            return;
-          }
-
-          // Handle AI error
           if (data.type === 'ai_error') {
             setStreamingMessage(null);
             message.error(data.content);
             return;
           }
 
-          // Handle regular chat messages
-          const msg: ChatMessage = data;
-          setMessages((prev) => [...prev, msg]);
-        } catch {
-          // ignore malformed frames
-        }
+          // Filtering logic
+          if (data.type === 'ai_complete' || !data.type) {
+            const msg: ChatMessage = data.type === 'ai_complete' ? data.message : data;
+            
+            // Check the REF (always fresh) against the message type
+            const currentMode = chatModeRef.current;
+            const msgIsPrivate = msg.is_private === true;
+            const viewIsPrivate = currentMode === 'private';
+
+            // Only add to state if it belongs in the current view
+            if (msgIsPrivate === viewIsPrivate) {
+               setMessages((prev) => [...prev, msg]);
+            }
+
+            if (data.type === 'ai_complete') {
+              setStreamingMessage(null);
+            }
+          }
+        } catch {}
       };
 
       ws.onerror = () => {
@@ -209,15 +208,39 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
     return () => {
       cancelled = true;
       if (wsRef.current) {
-        try {
-          wsRef.current.close();
-        } catch {}
+        try { wsRef.current.close(); } catch {}
         wsRef.current = null;
       }
       readyRef.current = false;
       setConnected(false);
     };
   }, [groupId]);
+
+
+  // ====== EFFECT: FETCH HISTORY (RUNS ON MODE TOGGLE) ======
+  // This handles switching the view between Public and Private
+  useEffect(() => {
+    const loadHistory = async () => {
+      try {
+        setLoading(true);
+        // Clear messages immediately to avoid ghosting
+        setMessages([]); 
+        
+        // Fetch new history for the selected mode
+        const history = await chatService.getMessages(groupId, 100, 0, chatMode);
+        setMessages(history);
+
+        // Load config if needed
+        const config = await agentConfigService.getAgentConfig(groupId);
+        setAgentConfig(config);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadHistory();
+  }, [groupId, chatMode]);
+
+
 
   // useEffect to check missed messages on mount
   useEffect(() => {
@@ -237,9 +260,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
     };
     checkMissed();
 
-    // Cleanup: Update viewed status when leaving the component
     return () => {
-        // We can try to update on unmount, but reliable execution isn't guaranteed
         chatService.updateLastViewed(groupId).catch(() => {});
     };
   }, [groupId]);
@@ -254,27 +275,21 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
 
   const toggleRag = async () => {
       if (!agentConfig || configLoading) return;
-      
-
       const isCurrentlyDocuments = agentConfig.rag_mode === 'documents_only';
-      // Toggle: If ON -> switch to 'disabled'. If OFF -> switch to 'documents_only'.
       const newMode = isCurrentlyDocuments ? 'disabled' : 'documents_only';
       
-      // Optimistic update
       const previousConfig = { ...agentConfig };
       setAgentConfig({ 
         ...agentConfig, 
-        rag_enabled: newMode === 'documents_only', // Update boolean for UI consistency
+        rag_enabled: newMode === 'documents_only', 
         rag_mode: newMode 
       });
       
       try {
         setConfigLoading(true);
-        // Calls updateRagMode from service
         await agentConfigService.updateRagMode(groupId, newMode);
         message.success(newMode === 'documents_only' ? "Documents enabled in prompt" : "Documents disabled");
       } catch (error) {
-        // Revert on error
         setAgentConfig(previousConfig);
         message.error("Failed to update RAG settings");
       } finally {
@@ -286,17 +301,14 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
     if (!agentConfig || configLoading) return;
     const newState = !agentConfig.socratic_prompting;
 
-    // Optimistic update
     const previousConfig = { ...agentConfig };
     setAgentConfig({ ...agentConfig, socratic_prompting: newState });
 
     try {
       setConfigLoading(true);
-      // Calls updateSocraticMode from service
       await agentConfigService.updateSocraticMode(groupId, newState);
       message.success(newState ? "Learning mode enabled" : "Learning mode disabled");
     } catch (error) {
-      // Revert on error
       setAgentConfig(previousConfig);
       message.error("Failed to update Learning mode");
     } finally {
@@ -306,7 +318,6 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
 
   // ====== INPUT HANDLERS ======
 
-  // Handle input change with @ detection
   const handleInputChange = (value: string) => {
     setInputValue(value);
 
@@ -330,7 +341,6 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
     }
   };
 
-  // Handle autocomplete selection
   const handleAutocompleteSelect = (value: string) => {
     const input = inputRef.current?.resizableTextArea?.textArea;
     if (!input) return;
@@ -348,42 +358,67 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
     setTimeout(() => input.focus(), 0);
   };
 
-  // handleSend with "Sticky Mention" logic
-  const handleSend = () => {
+  // ====== SEND HANDLER ======
+  const handleSend = async () => {
     const text = inputValue.trim();
-    if (!text) return;
+    if ((!text && attachments.length === 0) || !connected) return;
+
     const ws = wsRef.current;
-    if (!ws || !isOpen()) {
-      return;
-    }
+    if (!ws || !isOpen()) return;
+
+    if (attachments.length > 0) setUploading(true);
+
     try {
-      chatService.sendMessage(ws, text);
-      
-      // Check if the message started with a mention (e.g., "@TeachingAI ...")
-      // Regex: Starts with @, followed by characters, space/end
-      const mentionMatch = text.match(/^(@\w+)/);
-      
-      if (mentionMatch) {
-        // If it was a mention, keep it for the next message
-        setInputValue(`${mentionMatch[1]} `);
-      } else {
-        // Otherwise clear normally
+        // --- PRIVATE MODE: Send Structured Context ---
+        if (chatMode === 'private') {
+            const tempContext: Array<{ title: string; content: string }> = [];
+            let quizAttemptId: number | undefined = undefined;
+            let displayContent = text; // This is what shows in the chat bubble
+
+            // Process Attachments
+            for (const att of attachments) {
+                if (att.type === 'file') {
+                    // Add to HIDDEN context array
+                    tempContext.push({
+                        title: att.title,
+                        content: att.data as string
+                    });
+                    // Add a small tag to the visible message, but NOT the full text
+                    displayContent = `[Attached: ${att.title}]\n${displayContent}`;
+                } 
+                else if (att.type === 'quiz') {
+                    quizAttemptId = att.data as number;
+                    displayContent = `[Reviewing Quiz: ${att.title}]\n${displayContent}`;
+                }
+            }
+
+            // Send via Service (Handles JSON construction)
+            chatService.sendMessage(ws, displayContent.trim(), 'private', quizAttemptId, tempContext);
+        } 
+        
+        // --- PUBLIC MODE: Simple Text Send ---
+        else {
+            // Note: Attachments should be empty here because we block adding them in Public mode
+            chatService.sendMessage(ws, text, 'public');
+        }
+
         setInputValue('');
-      }
-    } catch {}
+        setAttachments([]);
+        
+    } catch (error) {
+        message.error("Failed to send message");
+    } finally {
+        setUploading(false);
+    }
   };
 
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    // 1. Send on Enter
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
       return;
     }
-
-    // "Atomic" Delete for sticky mentions
-    // If the input is EXACTLY a tag + space (e.g. "@TeachingAI "), and user hits Backspace/Delete, clear the whole thing.
     if ((e.key === 'Backspace' || e.key === 'Delete') && inputValue.match(/^@\w+\s$/)) {
       e.preventDefault();
       setInputValue('');
@@ -394,52 +429,95 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 10 * 1024 * 1024) {
-      message.error('File size exceeds 10MB limit');
-      return;
+    if (file.size > 10 * 1024 * 1024) { message.error('File size exceeds 10MB limit'); return; }
+    
+    // 1. PUBLIC MODE: Upload to Shared Documents (Old Workflow)
+    if (chatMode === 'public') {
+        setUploading(true);
+        setIsAttachMenuOpen(false);
+        try {
+            await studyGroupService.uploadDocument(groupId, file);
+            message.success(`Document "${file.name}" uploaded to group files`);
+            // Optional: You could send a chat message saying "I uploaded a file"
+        } catch (error) {
+            message.error("Failed to upload document");
+        } finally {
+            setUploading(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+        return;
     }
 
-    const allowedExtensions = ['.pdf', '.txt', '.docx', '.doc', '.md'];
-    const fileName = file.name.toLowerCase();
-    const hasValidExtension = allowedExtensions.some((ext) => fileName.endsWith(ext));
-
-    if (!hasValidExtension) {
-      message.error(`Unsupported file format. Allowed: ${allowedExtensions.join(', ')}`);
-      return;
-    }
-
+    // 2. PRIVATE MODE: Extract Context (New Workflow)
+    // Only show chips in private mode
     setUploading(true);
+    setIsAttachMenuOpen(false);
+
     try {
-      await studyGroupService.uploadDocument(groupId, file);
-      message.success(`Document "${file.name}" uploaded successfully`);
-    } catch (error: any) {
-      message.error(error.response?.data?.detail || 'Failed to upload document');
+        const result = await chatService.extractContext(file);
+        
+        let icon = <FileUnknownOutlined />;
+        const fileName = file.name.toLowerCase();
+        if (fileName.endsWith('.pdf')) icon = <FilePdfOutlined style={{ color: '#ff4d4f' }} />;
+        else if (fileName.endsWith('.docx') || fileName.endsWith('.doc')) icon = <FileWordOutlined style={{ color: '#1890ff' }} />;
+        else if (fileName.endsWith('.txt') || fileName.endsWith('.md')) icon = <FileTextOutlined style={{ color: '#52c41a' }} />;
+
+        const newAttachment: PendingAttachment = {
+            id: `file_${Date.now()}`,
+            type: 'file',
+            title: file.name,
+            data: result.content, // EXTRACTED TEXT
+            icon: icon
+        };
+        
+        setAttachments(prev => [...prev, newAttachment]);
+    } catch (error) {
+        message.error("Failed to process file context");
     } finally {
-      setUploading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+        setUploading(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
     }
+  };
+
+  // ====== HANDLE QUIZ SELECTION ======
+  const handleShareQuiz = (quiz: Quiz) => {
+    if (!quiz.latest_attempt) return;
+    
+    const newAttachment: PendingAttachment = {
+        id: `quiz_${quiz.id}`,
+        type: 'quiz',
+        title: quiz.title,
+        data: quiz.latest_attempt.id,
+        icon: <TrophyOutlined style={{ color: '#faad14' }} />
+    };
+    setAttachments(prev => [...prev, newAttachment]);
+    setIsQuizModalOpen(false);
+  };
+  
+
+  // Helper to remove attachment
+  const removeAttachment = (id: string) => {
+    setAttachments(prev => prev.filter(a => a.id !== id));
+  };
+
+  const openQuizModal = async () => {
+    setIsAttachMenuOpen(false); setIsQuizModalOpen(true); setQuizzesLoading(true);
+    try {
+        const allQuizzes = await quizService.getGroupQuizzes(groupId);
+        const attempted = allQuizzes.filter(q => q.latest_attempt && q.latest_attempt.completed_at);
+        setAvailableQuizzes(attempted);
+    } catch { message.error("Failed to load quizzes"); } finally { setQuizzesLoading(false); }
   };
 
 
   // ====== RENDERING HELPERS ======
 
-  // Helper to force Markdown to respect vertical spacing
   const preprocessContent = (content: string) => {
     if (!content) return '';
-    
-    // 1. Replace every newline with a "hard break" (two spaces + newline)
     let processed = content.replace(/\n/g, '  \n');
-    
-    // 2. Handle multiple consecutive empty lines
-    // Markdown collapses multiple breaks. We trick it by inserting a 
-    // Zero-Width Space (&#8203;) on empty lines so they aren't collapsed.
-    // This regex finds lines that are just whitespace/newlines and keeps them alive.
     return processed.replace(/\n\s*\n/g, '\n\n&#8203;\n\n');
   };
 
-  // Render a single normal message
   const renderMessage = (msg: ChatMessage) => {
     const isOwn = msg.user?.id === user?.id;
     const isSystem = msg.message_type === 'system';
@@ -505,7 +583,6 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
               lineHeight: '1.375rem',
               color: colors.otherText,
               wordWrap: 'break-word',
-              // whiteSpace: 'pre-wrap', 
             }}
           >
             <ReactMarkdown remarkPlugins={[remarkBreaks]}>
@@ -549,7 +626,6 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
               lineHeight: '1.375rem',
               color: colors.otherText,
               wordWrap: 'break-word',
-              // whiteSpace: 'pre-wrap',
               minHeight: '20px',
             }}
           >
@@ -581,9 +657,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
     try {
       const result = await chatService.summariseMissed(groupId);
       setSummaryText(result.summary);
-      setShowSummaryPrompt(false); // Hide the prompt
-      
-      // Update viewed status now that we've addressed it
+      setShowSummaryPrompt(false); 
       await chatService.updateLastViewed(groupId);
     } catch (e) {
       message.error("Failed to generate summary");
@@ -607,10 +681,58 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
 
 
 
+  // ====== ATTACHMENT MENU UI ======
+  const attachmentMenu = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '180px' }}>
+        <Button 
+            type="text" 
+            icon={<FileOutlined />} 
+            style={{ textAlign: 'left', justifyContent: 'flex-start' }}
+            onClick={() => fileInputRef.current?.click()}
+        >
+            Upload File
+        </Button>
+        <Tooltip title={chatMode === 'public' ? "Switch to 'My Tutor' mode to share quiz results" : ""}>
+            <Button 
+                type="text" 
+                icon={<TrophyOutlined />} 
+                style={{ textAlign: 'left', justifyContent: 'flex-start' }}
+                disabled={chatMode !== 'private'}
+                onClick={openQuizModal}
+            >
+                Share Quiz Results
+            </Button>
+        </Tooltip>
+    </div>
+  );
+
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: '400px', maxHeight: '100%', background: colors.chatBg }}>
+      
+      {/* ====== TOGGLE HEADER ====== */}
+      <div style={{ 
+        padding: '10px 16px', 
+        borderBottom: `1px solid ${colors.border}`, 
+        background: colors.messageBg, 
+        display: 'flex', 
+        justifyContent: 'center',
+        flexShrink: 0 
+      }}>
+        <Segmented
+          options={[
+            { label: 'Group Chat', value: 'public', icon: <UserOutlined /> },
+            { label: 'My Tutor', value: 'private', icon: <RobotOutlined /> },
+          ]}
+          value={chatMode}
+          onChange={(val) => setChatMode(val as 'public' | 'private')}
+          block
+          style={{ maxWidth: 300 }}
+        />
+      </div>
+
       {/* Status bar */}
-      <div style={{ padding: '12px 16px', borderBottom: `1px solid ${colors.border}`, background: colors.messageBg, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+      <div style={{ padding: '8px 16px', borderBottom: `1px solid ${colors.border}`, background: colors.messageBg, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
         <div style={{ width: 8, height: 8, borderRadius: '50%', background: connected ? colors.onlineGreen : colors.offlineRed }} />
         <Text style={{ fontSize: '14px', color: colors.secondaryText }}>{connected ? 'Connected' : 'Disconnected'}</Text>
         {streamingMessage && (
@@ -627,8 +749,18 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
           <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '300px' }}><Spin size="large" /></div>
         ) : messages.length === 0 && !streamingMessage ? (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '300px', padding: 40 }}>
-            <Text type="secondary" style={{ fontSize: '16px', color: colors.secondaryText }}>No messages yet. Start the conversation!</Text>
-            <Text type="secondary" style={{ fontSize: '14px', color: colors.secondaryText, marginTop: 8 }}>Type <Tag>@TeachingAI</Tag> to ask the AI assistant</Text>
+            {chatMode === 'public' ? (
+                <>
+                    <Text type="secondary" style={{ fontSize: '16px', color: colors.secondaryText }}>No messages yet. Start the conversation!</Text>
+                    <Text type="secondary" style={{ fontSize: '14px', color: colors.secondaryText, marginTop: 8 }}>Type <Tag>@TeachingAI</Tag> to ask the AI assistant</Text>
+                </>
+            ) : (
+                <>
+                    <RobotOutlined style={{ fontSize: '40px', color: '#7289da', marginBottom: 16 }} />
+                    <Text type="secondary" style={{ fontSize: '16px', color: colors.secondaryText }}>This is your private space.</Text>
+                    <Text type="secondary" style={{ fontSize: '14px', color: colors.secondaryText, marginTop: 8 }}>Ask me anything! Your group members won't see this.</Text>
+                </>
+            )}
           </div>
         ) : (
           <>
@@ -643,7 +775,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
 
 
       {/* SUMMARY NOTIFICATION PROMPT*/}
-      {showSummaryPrompt && (
+      {showSummaryPrompt && chatMode === 'public' && (
         <div style={{
           position: 'absolute',
           bottom: '100px',
@@ -682,32 +814,42 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
         </div>
       )}
 
-      {/* SUMMARY RESULT MODAL (NEW IMPLEMENTATION) */}
+      {/* SUMMARY RESULT MODAL */}
       <Modal
-        title={
-            <Space>
-                <ReadOutlined style={{ color: '#1890ff' }} />
-                <span>Conversation Summary</span>
-            </Space>
-        }
-        open={!!summaryText}
-        onCancel={() => setSummaryText(null)}
-        footer={[
-            <Button key="copy" icon={<CopyOutlined />} onClick={handleCopySummary}>
-                Copy Summary
-            </Button>,
-            <Button key="close" type="primary" onClick={() => setSummaryText(null)}>
-                Close
-            </Button>
-        ]}
-        width={600}
-        styles={{ body: { maxHeight: '60vh', overflowY: 'auto' } }}
+        title={<Space><TrophyOutlined style={{ color: '#faad14' }} /> Select a Quiz to Review</Space>}
+        open={isQuizModalOpen}
+        onCancel={() => setIsQuizModalOpen(false)}
+        footer={null}
+        width={500}
       >
-        <div style={{ padding: '8px', color: colors.otherText }}>
-             <ReactMarkdown remarkPlugins={[remarkBreaks]}>
-                {summaryText || ''}
-             </ReactMarkdown>
-        </div>
+        {quizzesLoading ? <div style={{ display: 'flex', justifyContent: 'center', padding: '20px' }}><Spin /></div> : availableQuizzes.length === 0 ? <Empty description="No completed quizzes found" /> : (
+            <List
+                dataSource={availableQuizzes}
+                renderItem={(quiz) => (
+                    <List.Item>
+                        <Card hoverable style={{ width: '100%', cursor: 'pointer', borderColor: colors.border, background: isDark ? '#1f1f1f' : '#fff' }} 
+                          onClick={() => handleShareQuiz(quiz)} bodyStyle={{ padding: '12px 16px' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                  <Text strong style={{ color: colors.otherText, display: 'block' }}>
+                                    {quiz.title}
+                                  </Text>
+
+                                  <Text type="secondary" style={{ fontSize: '12px' }}>
+                                    Completed: {new Date(quiz.latest_attempt?.completed_at || '').toLocaleDateString()}
+                                    </Text>
+                                </div>
+                                <div style={{ textAlign: 'right' }}>
+                                  <Tag color={quiz.latest_attempt?.passed ? 'green' : 'red'}>
+                                    {quiz.latest_attempt?.score}/{quiz.latest_attempt?.total_questions}
+                                    </Tag>
+                                </div>
+                            </div>
+                        </Card>
+                    </List.Item>
+                )}
+            />
+        )}
       </Modal>
 
       {/* Input area */}
@@ -724,19 +866,60 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
           </div>
         )}
 
+        {/* Attachment Chips Container */}
+        {attachments.length > 0 && (
+            <div style={{ display: 'flex', gap: '8px', paddingBottom: '12px', overflowX: 'auto' }}>
+                {attachments.map(att => (
+                    <div key={att.id} style={{ 
+                        display: 'flex', alignItems: 'center', gap: '8px', 
+                        background: colors.chipBg, padding: '4px 8px', borderRadius: '8px',
+                        border: `1px solid ${colors.border}`, fontSize: '12px'
+                    }}>
+                        {att.icon}
+                        <Text style={{ maxWidth: '150px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', color: colors.otherText }}>
+                            {att.title}
+                        </Text>
+                        <Button 
+                            type="text" size="small" icon={<CloseOutlined style={{ fontSize: '10px' }} />} 
+                            onClick={() => removeAttachment(att.id)}
+                            style={{ width: '16px', height: '16px', minWidth: '16px', color: colors.secondaryText, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                        />
+                    </div>
+                ))}
+            </div>
+        )}
+
         {/* Input Container */}
         <div style={{ background: colors.inputBg, borderRadius: '8px', border: `1px solid ${colors.inputBorder}`, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 8 }}>
           <input ref={fileInputRef} type="file" onChange={handleFileSelect} style={{ display: 'none' }} accept=".pdf,.txt,.docx,.doc,.md" />
           
-          {/* 1. Attachment Button */}
-          <Tooltip title="Attach document">
-            <Button type="text" icon={uploading ? <LoadingOutlined /> : <PaperClipOutlined />} onClick={() => fileInputRef.current?.click()} disabled={uploading} style={{ color: colors.secondaryText, padding: '4px 8px' }} />
-          </Tooltip>
+          {/* Attachment menu */}
+          <Popover 
+            content={attachmentMenu} 
+            trigger="click" 
+            open={isAttachMenuOpen} 
+            onOpenChange={setIsAttachMenuOpen}
+            placement="topLeft"
+            overlayStyle={{ padding: 0 }}
+          >
+            <Tooltip title="Attachments">
+                <Button 
+                    type="text" 
+                    icon={uploading ? <LoadingOutlined /> : <PlusOutlined style={{ fontSize: '16px', color: colors.secondaryText }} />} 
+                    disabled={uploading} 
+                    style={{ 
+                        borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: isAttachMenuOpen ? (isDark ? '#4f545c' : '#e3e5e8') : 'transparent'
+                    }} 
+                />
+            </Tooltip>
+          </Popover>
 
-          {/* Vertical Divider between attachments and toggles */}
+
+          {/* Vertical Divider */}
           <Divider type="vertical" style={{ height: '20px', borderColor: colors.border }} />
 
-          {/* 2. RAG Toggle (Use Documents) */}
+          {/* RAG Toggle */}
           <Tooltip title={agentConfig?.rag_enabled ? "Disable documents" : "Use documents in prompt"}>
             <Button 
               type="text" 
@@ -744,8 +927,6 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
               onClick={toggleRag} 
               loading={configLoading}
               style={{ 
-                // Active: Solid Blue Background, White Text
-                // Inactive: Transparent Background, Secondary Text
                 color: agentConfig?.rag_enabled ? '#fff' : colors.secondaryText,
                 backgroundColor: agentConfig?.rag_enabled ? colors.activeRag : 'transparent',
                 borderRadius: '6px',
@@ -755,7 +936,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
             />
           </Tooltip>
 
-          {/* 3. Socratic Toggle (Learning Mode) */}
+          {/* Socratic Toggle */}
           <Tooltip title={agentConfig?.socratic_prompting ? "Disable learning mode" : "Enable learning mode"}>
             <Button 
               type="text" 
@@ -763,8 +944,6 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
               onClick={toggleSocratic} 
               loading={configLoading}
               style={{ 
-                // Active: Solid Purple Background, White Text
-                // Inactive: Transparent Background, Secondary Text
                 color: agentConfig?.socratic_prompting ? '#fff' : colors.secondaryText,
                 backgroundColor: agentConfig?.socratic_prompting ? colors.activeSocratic : 'transparent',
                 borderRadius: '6px',
@@ -780,17 +959,10 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
             onChange={(e) => handleInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={!connected}
-            placeholder={`Message #${groupId} (Type @ to mention TeachingAI)`}
+            placeholder={chatMode === 'private' ? "Ask your private AI tutor..." : `Message #${groupId} (Type @ to mention TeachingAI)`}
             variant="borderless"
             autoSize={{ minRows: 1, maxRows: 3 }}
-            style={{
-              flex: 1,
-              background: 'transparent',
-              color: colors.otherText,
-              fontSize: '15px',
-              padding: '11px 0',
-              resize: 'none',
-            }}
+            style={{ flex: 1, background: 'transparent', color: colors.otherText, fontSize: '15px', padding: '11px 0', resize: 'none' }}
           />
         
           <Button type="text" icon={<SendOutlined />} onClick={handleSend} disabled={!connected || !inputValue.trim()} style={{ color: inputValue.trim() ? colors.ownBubble : colors.secondaryText, padding: '4px 8px' }} />
@@ -801,10 +973,10 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
         @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         .chat-markdown p {
-          margin-bottom: 6px; /* Adds space between paragraphs */
+          margin-bottom: 6px; 
         }
         .chat-markdown p:last-child {
-          margin-bottom: 0; /* Prevents extra space at the bottom of the bubble */
+          margin-bottom: 0; 
         }
       `}</style>
     </div>

@@ -113,6 +113,7 @@ def list_quizzes(
         attempt_summary = None
         if latest_attempt:
             attempt_summary = QuizAttemptSummary(
+                id=latest_attempt.id,
                 score=latest_attempt.score,
                 total_questions=latest_attempt.total_questions,
                 passed=(latest_attempt.score / latest_attempt.total_questions) >= 0.5,

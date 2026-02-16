@@ -9,6 +9,7 @@ import logging
 
 from google import genai
 from google.genai import types
+from google.genai.errors import ClientError, ServerError
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -97,6 +98,12 @@ class BaseLLMModel:
         
         self.client = genai.Client(api_key=self.api_key)
         self.model_name = model_name
+
+        self.fallback_chain = [
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite" # Fallback to lite version
+        ]
+        
         self.default_temperature = default_temperature
         self.top_p = top_p
         self.top_k = top_k
@@ -199,7 +206,26 @@ class BaseLLMModel:
             return None
         return session.get_summary()
     
-
+    def add_message_to_history(self, session_id: str, role: str, content: str) -> bool:
+        """
+        Manually add a message to the session history.
+        Useful for injecting system context, quiz results, or specialized event logs.
+        
+        Args:
+            session_id: The session identifier
+            role: The role (e.g., 'system', 'user', 'assistant')
+            content: The message content
+            
+        Returns:
+            bool: True if session exists and message added, False otherwise.
+        """
+        session = self.get_session(session_id)
+        if session:
+            session.add_message(role, content)
+            return True
+        logger.warning(f"Attempted to add message to non-existent session {session_id}")
+        return False
+    
     # ========================
     # Core LLM Functionality
     # ========================
@@ -313,53 +339,80 @@ class BaseLLMModel:
         # Add user message to history
         session.add_message("user", user_message)
         
-        try:
-            # Build contents for API call
-            contents = self.build_contents_for_session(
-                session=session,
-                user_message=user_message,
-                use_chat_history=use_chat_history,
-                attachments=attachments,
-            )
-            
-            # Prepare generation config
-            config_params: Dict[str, Any] = {
-                "temperature": temperature if temperature is not None else self.default_temperature,
-                "top_p": top_p if top_p is not None else self.top_p,
-                "top_k": top_k if top_k is not None else self.top_k,
-                "thinking_config": types.ThinkingConfig(thinking_budget=0),
-            }
-            
-            if max_output_tokens is not None:
-                config_params["max_output_tokens"] = max_output_tokens
-            elif self.max_output_tokens is not None:
-                config_params["max_output_tokens"] = self.max_output_tokens
-            
-            if system_prompt:
-                config_params["system_instruction"] = system_prompt
-            
-            generation_config = types.GenerateContentConfig(**config_params)
-            
-            # Generate response with await (for async support)
-            response = await self.client.models.generate_content(
-                model=self.model_name,
-                contents=contents,
-                config=generation_config, 
-            )
-            
-            # Extract response text
-            response_text = response.text if response.text else ""
-            
-            # Add assistant response to history
-            session.add_message("assistant", response_text)
-            
-            logger.info(f"Generated response for session {session_id}")
-            return response_text
-            
-        except Exception as e:
-            # Log error but still save user message
-            logger.error(f"Error generating response: {str(e)}")
-            raise RuntimeError(f"Failed to generate response: {str(e)}")
+
+        # Build contents for API call
+        contents = self.build_contents_for_session(
+            session=session,
+            user_message=user_message,
+            use_chat_history=use_chat_history,
+            attachments=attachments,
+        )
+        
+        # Prepare generation config
+        config_params: Dict[str, Any] = {
+            "temperature": temperature if temperature is not None else self.default_temperature,
+            "top_p": top_p if top_p is not None else self.top_p,
+            "top_k": top_k if top_k is not None else self.top_k,
+            "thinking_config": types.ThinkingConfig(thinking_budget=0),
+        }
+        
+        if max_output_tokens is not None:
+            config_params["max_output_tokens"] = max_output_tokens
+        elif self.max_output_tokens is not None:
+            config_params["max_output_tokens"] = self.max_output_tokens
+        
+        if system_prompt:
+            config_params["system_instruction"] = system_prompt
+        
+        generation_config = types.GenerateContentConfig(**config_params)
+
+        # Cascade through fallback models
+        last_exception = None
+    
+        for model in self.fallback_chain:
+            try:
+                logger.info(f"Attempting generation with model: {model}")
+                
+                response = await self.client.models.generate_content(
+                    model=model,
+                    contents=contents,
+                    config=generation_config, 
+                )
+                
+                response_text = response.text if response.text else ""
+                
+                # Success! Save to history and return
+                session.add_message("assistant", response_text)
+                return response_text
+
+            except (ClientError, ServerError) as e:
+
+                if e.code in [429, 503]:
+                    logger.warning(f"Rate limit/Error hit on {model} (Status: {e.code}). Falling back...")
+                    last_exception = e
+                    continue # Try next model
+                
+                # Treat other 5xx errors as retriable if you want, or raise them. 
+                # For safety, we usually raise 4xx errors (like 400 Invalid Argument) immediately.
+                if isinstance(e, ClientError):
+                    logger.error(f"Non-retriable ClientError on {model}: {e}")
+                    raise e
+                
+                # If it's a ServerError other than 503, we might want to continue or raise.
+                # Currently your logic raises non-503s here, which is fine:
+                logger.error(f"Non-retriable ServerError on {model}: {e}")
+                raise e
+
+            except Exception as e:
+                logger.error(f"Unexpected error on {model}: {e}")
+                last_exception = e
+                continue
+
+        # If we exit the loop, all models failed
+        error_msg = f"All models exhausted. Last error: {str(last_exception)}"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)
+
     
     async def generate_response_with_context(
         self,
@@ -418,16 +471,16 @@ class BaseLLMModel:
         
     ) -> AsyncIterator[str]:
         """
-        Stream a response as text deltas; at stream end, save the full assistant reply in chat history.
+        Stream a response as text deltas with cascading fallback support.
         """
         session = self.get_session(session_id)
         if session is None:
             raise ValueError(f"Session {session_id} not found")
 
-        # Record the user's message immediately
+        # 1. Record User Message (Do this once, regardless of how many retries)
         session.add_message("user", user_message)
 
-        # Build contents with/without prior messages
+        # 2. Build Contents (Shared across all attempts)
         contents = self.build_contents_for_session(
             session=session,
             user_message=user_message,
@@ -435,46 +488,97 @@ class BaseLLMModel:
             attachments=attachments,
         )
 
-        # Build generation config
+        # 3. Prepare Base Config
         config_params: Dict[str, Any] = {
             "temperature": temperature if temperature is not None else self.default_temperature,
             "top_p": top_p if top_p is not None else self.top_p,
             "top_k": top_k if top_k is not None else self.top_k,
+            # Note: Ensure 'thinking_config' is supported by Flash/Lite or handle potential warnings
             "thinking_config": types.ThinkingConfig(thinking_budget=0),
         }
+        
         if max_output_tokens is not None:
             config_params["max_output_tokens"] = max_output_tokens
         elif self.max_output_tokens is not None:
             config_params["max_output_tokens"] = self.max_output_tokens
+            
         if system_prompt:
             config_params["system_instruction"] = system_prompt
 
         generation_config = types.GenerateContentConfig(**config_params)
 
-        # Stream from the model
+        # === CASCADE LOOP ===
         accumulated = []
-        try:
-            stream = await self.client.aio.models.generate_content_stream(
-                model=self.model_name,
-                contents=contents,
-                config=generation_config,
-            )
+        last_exception = None
+        
+        # We need to know if we successfully started streaming to avoid duplicates
+        stream_completed_successfully = False
 
-            async for chunk in stream:
-                delta = getattr(chunk, "text", None)
-                if not delta:
+        for model in self.fallback_chain:
+            has_yielded_content = False # Track if this specific model output anything
+            
+            try:
+                logger.info(f"Attempting stream with model: {model}")
+                
+                # Get the stream iterator
+                stream = await self.client.aio.models.generate_content_stream(
+                    model=model,
+                    contents=contents,
+                    config=generation_config,
+                )
+
+                async for chunk in stream:
+                    delta = getattr(chunk, "text", None)
+                    if not delta:
+                        continue
+                    
+                    # If we get here, the model is working.
+                    has_yielded_content = True
+                    accumulated.append(delta)
+                    yield delta
+                
+                # If we finish the loop, we are done
+                stream_completed_successfully = True
+                break
+
+            except (ClientError, ServerError) as e:
+                # 429 (Too Many Requests) or 503 (Service Unavailable)
+                if e.code in [429, 503]:
+                    if has_yielded_content:
+                        # CRITICAL: If we already sent text to the frontend, we cannot 
+                        # cleanly switch to a new model (it would restart the sentence).
+                        # We must raise the error.
+                        logger.error(f"Rate limit hit mid-stream on {model}. Cannot fallback.")
+                        raise e
+                    
+                    # Otherwise, clean retry
+                    logger.warning(f"Rate limit hit on {model} (start of stream). Falling back...")
+                    last_exception = e
                     continue
-                accumulated.append(delta)
-                yield delta
+                else:
+                    # Non-retriable error (e.g., Invalid Argument)
+                    logger.error(f"Non-retriable error on {model}: {e}")
+                    raise e
+                    
+            except Exception as e:
+                if has_yielded_content:
+                    logger.error(f"Error mid-stream on {model}: {e}")
+                    raise e
+                    
+                logger.error(f"Unexpected error on {model}: {e}")
+                last_exception = e
+                continue
 
-            # Save final assistant message into history after stream completes
+        # 4. Finalize
+        if stream_completed_successfully:
             final_text = "".join(accumulated)
             session.add_message("assistant", final_text)
             logger.info(f"Streamed response for session {session_id} with {len(accumulated)} chunks")
-
-        except Exception as e:
-            logger.error(f"Error during streaming: {str(e)}")
-            raise RuntimeError(f"Failed to stream response: {str(e)}")
+        else:
+            # If we fall through the loop without success
+            error_msg = f"All models exhausted for streaming. Last error: {str(last_exception)}"
+            logger.error(error_msg)
+            raise RuntimeError(error_msg)
 
     async def generate_response_with_context_stream(
         self,
@@ -522,49 +626,74 @@ class BaseLLMModel:
         """
         Generate a one-off response without session history.
         Useful for internal tasks like classification or summarization.
+        Includes cascading fallback support (Pro -> Flash -> Lite).
         """
-        try:
-            # 1. Build Content Parts (Files + Text)
-            message_parts = []
-            
-            # Add Attachments first if they exist
-            if attachments:
-                for file_ref in attachments:
-                    message_parts.append(
-                        types.Part.from_uri(
-                            file_uri=file_ref.uri,
-                            mime_type=file_ref.mime_type
-                        )
+        
+        # 1. Build Content Parts (Files + Text)
+        message_parts = []
+        
+        # Add Attachments first if they exist
+        if attachments:
+            for file_ref in attachments:
+                message_parts.append(
+                    types.Part.from_uri(
+                        file_uri=file_ref.uri,
+                        mime_type=file_ref.mime_type
                     )
-            
-            # Add the text prompt
-            message_parts.append(types.Part.from_text(text=prompt))
-            
-            contents = [types.Content(role="user", parts=message_parts)]
+                )
+        
+        # Add the text prompt
+        message_parts.append(types.Part.from_text(text=prompt))
+        
+        contents = [types.Content(role="user", parts=message_parts)]
 
-            # 2. Prepare Config
-            config_params = {
-                "temperature": temperature,
-                "max_output_tokens": max_output_tokens,
-                "top_p": 0.95,
-                "top_k": 40,
-            }
-            
-            if system_prompt:
-                config_params["system_instruction"] = system_prompt
+        # 2. Prepare Config
+        config_params = {
+            "temperature": temperature,
+            "max_output_tokens": max_output_tokens,
+            "top_p": 0.95,
+            "top_k": 40,
+            # "thinking_config": types.ThinkingConfig(thinking_budget=0), 
+        }
+        
+        if system_prompt:
+            config_params["system_instruction"] = system_prompt
 
-            generation_config = types.GenerateContentConfig(**config_params)
+        generation_config = types.GenerateContentConfig(**config_params)
+        
+        # 3. Cascade Loop
+        last_exception = None
+        
+        for model in self.fallback_chain:
+            try:
+                logger.info(f"Attempting stateless generation with model: {model}")
+                
+                # Call Model (Stateless)
+                response = await self.client.aio.models.generate_content(
+                    model=model,
+                    contents=contents,
+                    config=generation_config,
+                )
+                
+                return response.text if response.text else ""
             
-            # 3. Call Model (Stateless)
-            response = await self.client.aio.models.generate_content(
-                model=self.model_name,
-                contents=contents,
-                config=generation_config,
-            )
-            
-            return response.text if response.text else ""
-            
-        except Exception as e:
-            logger.error(f"Error generating stateless response: {str(e)}")
-            # Re-raise so the caller (Quiz Agent) knows it failed
-            raise RuntimeError(f"Stateless generation failed: {str(e)}")
+            except (ClientError, ServerError) as e:
+                # Check for Rate Limit (429) or Service Unavailable (503)
+                if e.code in [429, 503]:
+                    logger.warning(f"Stateless rate limit hit on {model} (Status: {e.code}). Falling back...")
+                    last_exception = e
+                    continue # Try next model
+                else:
+                    # Non-retriable error
+                    logger.error(f"Stateless non-retriable error on {model}: {e}")
+                    raise e
+                    
+            except Exception as e:
+                logger.error(f"Stateless unexpected error on {model}: {e}")
+                last_exception = e
+                continue
+
+        # If we fall through the loop without success
+        error_msg = f"All models exhausted for stateless generation. Last error: {str(last_exception)}"
+        logger.error(error_msg)
+        raise RuntimeError(error_msg)

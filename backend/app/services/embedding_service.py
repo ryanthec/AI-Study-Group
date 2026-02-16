@@ -26,17 +26,33 @@ class EmbeddingService:
             print(f"Error generating embedding: {e}")
             raise
     
-    def embed_batch(self, texts: List[str]) -> List[List[float]]:
-        """Generate embeddings for multiple texts at once (more efficient)"""
+    def embed_batch(self, texts: List[str], batch_size: int = 100) -> List[List[float]]:
+        """
+        Generate embeddings for multiple texts at once.
+        Handles API limits by splitting input into batches of max 100 requests.
+        """
+        all_embeddings = []
+        total_texts = len(texts)
+        
         try:
-            result = self.client.models.embed_content(
-                model=self.model,
-                contents=texts,
-                config=types.EmbedContentConfig(output_dimensionality=768)
-            )
-            # Extract all embeddings
-            embeddings = [list(emb.values) for emb in result.embeddings]
-            return embeddings
+            # Loop through the texts in chunks of 'batch_size' (default 100)
+            for i in range(0, total_texts, batch_size):
+                batch = texts[i : i + batch_size]
+                
+                # Call API for this specific batch
+                result = self.client.models.embed_content(
+                    model=self.model,
+                    contents=batch,
+                    config=types.EmbedContentConfig(output_dimensionality=768)
+                )
+                
+                # Extract embeddings for this batch and extend the main list
+                if result.embeddings:
+                    batch_embeddings = [list(emb.values) for emb in result.embeddings]
+                    all_embeddings.extend(batch_embeddings)
+            
+            return all_embeddings
+            
         except Exception as e:
             print(f"Error generating batch embeddings: {e}")
             raise

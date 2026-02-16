@@ -100,4 +100,12 @@ class ConnectionManager:
                 # If send fails, assume disconnected
                 self.disconnect(ws, group_id)
 
+    async def send_personal_message(self, message: dict, websocket: WebSocket):
+            """Send a message to a specific client only."""
+            try:
+                await websocket.send_json(message)
+            except Exception:
+                # Handle disconnection if needed
+                pass
+            
 manager = ConnectionManager()

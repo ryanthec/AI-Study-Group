@@ -20,10 +20,13 @@ class StudyGroupMessage(Base):
     message_type = Column(Enum(MessageType), default=MessageType.TEXT)
     created_at = Column(DateTime(timezone=True), default=datetime.now(timezone.utc))
     is_embedded = Column(Boolean, default=False)
+    is_private = Column(Boolean, default=False)
+    recipient_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
 
     # Relationships
     group = relationship("StudyGroup", back_populates="messages")
-    user = relationship("User")
+    user = relationship("User", foreign_keys=[user_id])
+    recipient = relationship("User", foreign_keys=[recipient_id])
 
     def to_dict(self):
         return {
@@ -33,5 +36,7 @@ class StudyGroupMessage(Base):
             "content": self.content,
             "message_type": self.message_type.value,
             "created_at": self.created_at.isoformat() if self.created_at else None,
-            "user": self.user.to_dict() if self.user else None
+            "user": self.user.to_dict() if self.user else None,
+            "is_private": self.is_private,
+            "recipient_id": self.recipient_id
         }
