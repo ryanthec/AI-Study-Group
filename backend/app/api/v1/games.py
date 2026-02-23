@@ -211,8 +211,10 @@ async def run_game_loop(game_id: int):
             # 3. Time's Up! Batch Grade Everyone
             participants = db.query(GameParticipant).filter_by(session_id=game_id).all()
             correct_answer = current_card["back"]
+            points_earned_map = {}
             
             for p in participants:
+                points_earned_map[p.user_id] = 0
                 # Check if they answered THIS specific card
                 if p.last_answered_card_index == i:
                     if p.last_answer == correct_answer:
@@ -220,6 +222,7 @@ async def run_game_loop(game_id: int):
                         points = 100 + (p.streak * 10)
                         p.score += points
                         p.streak += 1
+                        points_earned_map[p.user_id] = points
                     else:
                         # Wrong
                         p.streak = 0
@@ -231,7 +234,7 @@ async def run_game_loop(game_id: int):
 
             # 4. Broadcast Results (Leaderboard + Correct Answer)
             leaderboard = db.query(GameParticipant).filter_by(session_id=game_id).order_by(GameParticipant.score.desc()).all()
-            lb_data = [{"username": p.user.username, "score": p.score, "user_id": str(p.user_id)} for p in leaderboard]
+            lb_data = [{"username": p.user.username, "score": p.score, "user_id": str(p.user_id), "points_earned": points_earned_map.get(p.user_id, 0), "streak": p.streak} for p in leaderboard]
             
             await game_manager.send_round_result(game_id, correct_answer, lb_data)
 
@@ -248,7 +251,7 @@ async def run_game_loop(game_id: int):
         db.commit()
         
         leaderboard = db.query(GameParticipant).filter_by(session_id=game_id).order_by(GameParticipant.score.desc()).all()
-        lb_data = [{"username": p.user.username, "score": p.score, "user_id": str(p.user_id)} for p in leaderboard]
+        lb_data = [{"username": p.user.username, "score": p.score, "user_id": str(p.user_id), "points_earned": 0, "streak": p.streak} for p in leaderboard]
         await game_manager.broadcast(game_id, {"type": "game_over", "leaderboard": lb_data})
 
     except Exception as e:

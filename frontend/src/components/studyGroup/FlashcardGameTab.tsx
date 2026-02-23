@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Card, Button, Typography, List, Modal, Input, Progress, Select, message, Form, Tag, Avatar, Space, Divider, Slider, Result, Tabs } from 'antd';
-import { PlusOutlined, FileTextOutlined, UserOutlined, CrownOutlined, LogoutOutlined, ThunderboltFilled, DeleteOutlined, CheckCircleOutlined, CloseCircleOutlined, BookOutlined, RocketOutlined } from '@ant-design/icons';
+import { PlusOutlined, FileTextOutlined, UserOutlined, CrownOutlined, LogoutOutlined, ThunderboltFilled, DeleteOutlined, CheckCircleOutlined, CloseCircleOutlined, BookOutlined, RocketOutlined, PlaySquareOutlined } from '@ant-design/icons';
+import Confetti from 'react-confetti';
 import { useAuth } from '../../hooks/useAuth';
 import { useTheme } from '../../hooks/useTheme';
 import { documentService } from '../../services/document.service';
@@ -50,8 +51,8 @@ export const FlashcardGameTab = ({ groupId, setGameActive }: FlashcardGameTabPro
   const isHost = activeGame && user && String(activeGame.host_id) === String(user.id);
 
   // --- Theme Colors ---
-  const successBg = isDark ? '#135200' : '#d9f7be';
-  const errorBg = isDark ? '#5c0011' : '#ffa39e';
+  const successBg = isDark ? 'rgba(82, 196, 26, 0.2)' : '#d9f7be';
+  const errorBg = isDark ? 'rgba(255, 77, 79, 0.2)' : '#ffccc7';
   const textColor = isDark ? 'rgba(255, 255, 255, 0.85)' : 'rgba(0, 0, 0, 0.85)';
   const cardBg = isDark ? '#1f1f1f' : '#fff';
   const leaderboardItemBg = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(255,255,255,0.6)';
@@ -212,10 +213,12 @@ export const FlashcardGameTab = ({ groupId, setGameActive }: FlashcardGameTabPro
 
         case 'round_end':
           setGameState('result');
+          const myStats = data.leaderboard.find((p: any) => p.user_id === String(user?.id)) || {};
           setRoundResultInfo({
             correct_answer: data.correct_answer,
             leaderboard: data.leaderboard,
-            is_correct: selectedOptionRef.current === data.correct_answer
+            is_correct: selectedOptionRef.current === data.correct_answer,
+            points_earned: myStats.points_earned || 0
           });
           break;
 
@@ -296,25 +299,63 @@ export const FlashcardGameTab = ({ groupId, setGameActive }: FlashcardGameTabPro
   if (gameState === 'result') {
     const isCorrect = roundResultInfo?.is_correct;
     return (
-      <div style={{ padding: 40, textAlign: 'center', backgroundColor: isCorrect ? successBg : errorBg, height: '100%', borderRadius: 12, transition: 'background-color 0.3s' }}>
-        <div style={{ marginBottom: 40 }}>
-          {isCorrect ? (
-            <Result status="success" icon={<CheckCircleOutlined style={{ color: '#52c41a', fontSize: 72 }} />} title={<span style={{ fontSize: 36, color: isDark && isCorrect ? '#fff' : '#52c41a' }}>Correct!</span>} subTitle={<span style={{ fontSize: 24, color: textColor }}>+ Points</span>} />
-          ) : (
-            <Result status="error" icon={<CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 72 }} />} title={<span style={{ fontSize: 36, color: isDark && !isCorrect ? '#fff' : '#ff4d4f' }}>Wrong!</span>} subTitle={<span style={{ color: textColor }}>Keep trying!</span>} />
-          )}
-        </div>
-        <Card style={{ marginTop: 20, border: isCorrect ? '2px solid #52c41a' : '2px solid #ff4d4f', background: cardBg }}>
-          <Text type="secondary">Correct Answer:</Text>
-          <Title level={3} style={{ color: textColor }}>{roundResultInfo?.correct_answer}</Title>
-        </Card>
-        <Divider style={{ borderColor: isDark ? '#434343' : '#a0a0a0' }}>Leaderboard</Divider>
-        <div style={{ maxWidth: 600, margin: '0 auto' }}>
-          <List itemLayout="horizontal" dataSource={roundResultInfo?.leaderboard?.slice(0, 5)} renderItem={(item: any, index: number) => (
-            <List.Item style={{ justifyContent: 'center', background: leaderboardItemBg, marginBottom: 8, borderRadius: 8, padding: '12px 24px', border: isDark ? '1px solid #434343' : '1px solid #d9d9d9' }}>
-              <List.Item.Meta avatar={<Avatar style={{ backgroundColor: index === 0 ? '#fadb14' : '#1890ff' }}>{index + 1}</Avatar>} title={<span style={{ color: textColor, fontSize: 16 }}>{item.username}</span>} description={<span style={{ color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)', fontWeight: 'bold' }}>{item.score} pts</span>} style={{ alignItems: 'center', textAlign: 'left' }} />
-            </List.Item>
-          )} />
+      // 1. Standard wrapper to match the padding of your other views perfectly
+      <div style={{ padding: 24, height: '100%', display: 'flex', flexDirection: 'column' }}>
+        <div style={{
+          flex: 1,
+          padding: '48px 24px',
+          textAlign: 'center',
+          backgroundColor: isCorrect ? successBg : errorBg,
+          borderRadius: '16px',
+          minHeight: '500px',
+          display: 'flex',
+          flexDirection: 'column',
+          transition: 'background-color 0.3s'
+        }}>
+          <div style={{ marginBottom: 40, flex: 1 }}>
+            {isCorrect ? (
+              <Result
+                status="success"
+                icon={<CheckCircleOutlined style={{ color: '#52c41a', fontSize: 72 }} />}
+                title={<span style={{ fontSize: 36, color: isDark && isCorrect ? '#fff' : '#52c41a' }}>Correct!</span>}
+                subTitle={<span style={{ fontSize: 24, color: textColor }}>+{roundResultInfo?.points_earned || 100} Points</span>}
+              />
+            ) : (
+              <Result
+                status="error"
+                icon={<CloseCircleOutlined style={{ color: '#ff4d4f', fontSize: 72 }} />}
+                title={<span style={{ fontSize: 36, color: isDark && !isCorrect ? '#fff' : '#ff4d4f' }}>Wrong!</span>}
+                subTitle={<span style={{ color: textColor }}>Keep trying!</span>}
+              />
+            )}
+          </div>
+
+          <Card style={{ marginTop: 20, border: isCorrect ? '2px solid #52c41a' : '2px solid #ff4d4f', background: cardBg }}>
+            <Text type="secondary">Correct Answer:</Text>
+            <Title level={3} style={{ color: textColor }}>{roundResultInfo?.correct_answer}</Title>
+          </Card>
+
+          <Divider style={{ borderColor: isDark ? '#434343' : '#a0a0a0' }}>Leaderboard</Divider>
+
+          <div style={{ maxWidth: 600, margin: '0 auto', width: '100%' }}>
+            <List
+              itemLayout="horizontal"
+              dataSource={roundResultInfo?.leaderboard?.slice(0, 5)}
+              renderItem={(item: any, index: number) => (
+                <List.Item style={{ background: leaderboardItemBg, marginBottom: 8, borderRadius: 8, padding: 0, border: isDark ? '1px solid #434343' : '1px solid #d9d9d9' }}>
+                  <div style={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', padding: '12px 24px' }}>
+                    <List.Item.Meta
+                      avatar={<Avatar style={{ backgroundColor: index === 0 ? '#fadb14' : '#1890ff' }}>{index + 1}</Avatar>}
+                      title={<Text strong ellipsis style={{ color: textColor, fontSize: 16, margin: 0, display: 'block' }}>{item.username}</Text>}
+                      style={{ alignItems: 'center', textAlign: 'left', margin: 0, flex: 1, minWidth: 0 }}
+                    />
+                    <div style={{ color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)', fontWeight: 'bold', whiteSpace: 'nowrap', marginLeft: 16, flexShrink: 0 }}>
+                      {item.score} pts
+                    </div>
+                  </div>
+                </List.Item>
+              )} />
+          </div>
         </div>
       </div>
     );
@@ -323,12 +364,29 @@ export const FlashcardGameTab = ({ groupId, setGameActive }: FlashcardGameTabPro
   // --- VIEW: GAME OVER ---
   if (gameState === 'finished') {
     return (
-      <div style={{ padding: 40, textAlign: 'center' }}>
+      <div style={{ padding: 40, textAlign: 'center', position: 'relative', overflow: 'hidden' }}>
+        <Confetti
+          width={window.innerWidth}
+          height={window.innerHeight}
+          recycle={false}
+          numberOfPieces={500}
+          gravity={0.15}
+        />
         <Result status="info" icon={<CrownOutlined style={{ color: '#fadb14', fontSize: 72 }} />} title={<span style={{ color: textColor }}>Game Over!</span>} subTitle={<span style={{ color: textColor }}>Final Standings</span>} />
-        <div style={{ maxWidth: 600, margin: '0 auto' }}>
+        <div style={{ maxWidth: 600, margin: '0 auto', width: '100%' }}>
           <List itemLayout="horizontal" dataSource={roundResultInfo?.leaderboard} renderItem={(item: any, index: number) => (
-            <List.Item style={{ justifyContent: 'center', background: leaderboardItemBg, marginBottom: 8, borderRadius: 8, padding: '12px 24px', border: index === 0 ? '2px solid #fadb14' : (isDark ? '1px solid #434343' : '1px solid #d9d9d9') }}>
-              <List.Item.Meta avatar={<Avatar style={{ backgroundColor: index === 0 ? '#fadb14' : '#1890ff' }}>{index + 1}</Avatar>} title={<Text strong style={{ color: textColor, fontSize: 16 }}>{item.username}</Text>} description={<span style={{ color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)' }}>{item.score} pts</span>} style={{ alignItems: 'center' }} />
+            // FIX 1: Padding moved from List.Item to the inner flex div
+            <List.Item style={{ background: leaderboardItemBg, marginBottom: 8, borderRadius: 8, padding: 0, border: index === 0 ? '2px solid #fadb14' : (isDark ? '1px solid #434343' : '1px solid #d9d9d9') }}>
+              <div style={{ display: 'flex', width: '100%', alignItems: 'center', justifyContent: 'space-between', padding: '12px 24px' }}>
+                <List.Item.Meta
+                  avatar={<Avatar style={{ backgroundColor: index === 0 ? '#fadb14' : '#1890ff' }}>{index + 1}</Avatar>}
+                  title={<Text strong ellipsis style={{ color: textColor, fontSize: 16, margin: 0, display: 'block' }}>{item.username}</Text>}
+                  style={{ alignItems: 'center', textAlign: 'left', margin: 0, flex: 1, minWidth: 0 }}
+                />
+                <div style={{ color: isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)', fontWeight: 'bold', whiteSpace: 'nowrap', marginLeft: 16, flexShrink: 0 }}>
+                  {item.score} pts
+                </div>
+              </div>
             </List.Item>
           )} />
         </div>
@@ -358,13 +416,15 @@ export const FlashcardGameTab = ({ groupId, setGameActive }: FlashcardGameTabPro
 
   // --- VIEW: BROWSING ---
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20 }}>
+    <div style={{ padding: 24, position: 'relative', minHeight: '600px' }}>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 20, position: 'relative', zIndex: 1 }}>
         <Title level={3} style={{ color: textColor }}>Active Battles</Title>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setIsModalOpen(true)}>New Game</Button>
       </div>
 
       <List
+        style={{ position: 'relative', zIndex: 1 }}
         grid={{ gutter: 16, column: 3 }}
         dataSource={games}
         locale={{ emptyText: "No active games. Start one!" }}
