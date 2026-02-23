@@ -111,6 +111,7 @@ class Settings(BaseSettings):
     # -------------------------
     # AI / Gemini
     # -------------------------
+    GEMINI_API_KEY_FREE: Optional[str] = Field(default=os.getenv("GEMINI_API_KEY_FREE"))
     GEMINI_API_KEY: Optional[str] = Field(default=os.getenv("GEMINI_API_KEY"))
 
     # -------------------------

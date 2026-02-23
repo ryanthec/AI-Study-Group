@@ -92,11 +92,21 @@ class BaseLLMModel:
             default_temperature: Default temperature for responses
             max_sessions: Maximum number of concurrent sessions
         """
-        self.api_key = api_key or os.getenv("GEMINI_API_KEY")
+        self.api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY_FREE")
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY not provided and not found in environment")
         
-        self.client = genai.Client(api_key=self.api_key)
+        free_key = os.getenv("GEMINI_API_KEY_FREE")
+        paid_key = api_key or os.getenv("GEMINI_API_KEY")
+        # Store clients as a list of tuples: (Name, ClientInstance)
+        self.clients = []
+        if free_key:
+            self.clients.append(("Free", genai.Client(api_key=free_key)))
+        if paid_key:
+            self.clients.append(("Paid", genai.Client(api_key=paid_key)))
+            
+        if not self.clients:
+            raise ValueError("No Gemini API keys provided in environment")
         self.model_name = model_name
 
         self.fallback_chain = [
@@ -125,7 +135,7 @@ class BaseLLMModel:
         session_id: str,
         group_id: int,
         metadata: Optional[Dict[str, Any]] = None
-    ) -> ChatSession:
+        ) -> ChatSession:
         """
         Create a new chat session tied to a study group.
         
@@ -163,8 +173,7 @@ class BaseLLMModel:
     
     def delete_session(self, session_id: str) -> bool:
         """Delete a chat session and clear its history."""
-        if session_id in self.sessions:
-            del self.sessions[session_id]
+        if self.sessions.pop(session_id, None) is not None:
             logger.info(f"Deleted session {session_id}")
             return True
         return False
@@ -232,27 +241,21 @@ class BaseLLMModel:
 
     # Helper to upload files from as an attachment in model API calls
     def upload_file_from_bytes(self, file_bytes: bytes, mime_type: str, display_name: str = "attachment") -> types.File:
-        """
-        Uploads raw bytes as a temporary file to Google GenAI.
-        Used for attaching PDFs/DOCXs directly to the model context.
-        """
-        try:
-            # Create a file-like object from bytes
-            file_io = io.BytesIO(file_bytes)
-            
-            # Upload to Google
-            file_upload = self.client.files.upload(
-                file=file_io,
-                config=types.UploadFileConfig(
-                    display_name=display_name,
-                    mime_type=mime_type
+        last_exception = None
+        for client_name, client in self.clients:
+            try:
+                file_io = io.BytesIO(file_bytes)
+                file_upload = client.files.upload(
+                    file=file_io,
+                    config=types.UploadFileConfig(display_name=display_name, mime_type=mime_type)
                 )
-            )
-            logger.info(f"Uploaded file {display_name} ({mime_type}) with URI {file_upload.uri}")
-            return file_upload
-        except Exception as e:
-            logger.error(f"Failed to upload file bytes: {str(e)}")
-            raise RuntimeError(f"File upload failed: {str(e)}")
+                logger.info(f"Uploaded file {display_name} via {client_name} key")
+                return file_upload
+            except Exception as e:
+                logger.warning(f"Failed to upload using {client_name} key: {e}")
+                last_exception = e
+                
+        raise RuntimeError(f"File upload failed on all keys: {str(last_exception)}")
         
     # Helper to build contents from session history
     def build_contents_for_session(
@@ -261,7 +264,7 @@ class BaseLLMModel:
         user_message: str,
         use_chat_history: bool,
         attachments: Optional[List[types.File]] = None
-    ) -> list[types.Content]:
+        ) -> list[types.Content]:
         contents: list[types.Content] = []
         
         # 1. Add Chat History (if enabled)
@@ -370,43 +373,37 @@ class BaseLLMModel:
         last_exception = None
     
         for model in self.fallback_chain:
-            try:
-                logger.info(f"Attempting generation with model: {model}")
-                
-                response = await self.client.models.generate_content(
-                    model=model,
-                    contents=contents,
-                    config=generation_config, 
-                )
-                
-                response_text = response.text if response.text else ""
-                
-                # Success! Save to history and return
-                session.add_message("assistant", response_text)
-                return response_text
+            for client_name, client in self.clients:
+                try:
+                    logger.info(f"Attempting generation with model: {model} using {client_name} key")
+                    
+                    response = await client.models.generate_content(
+                        model=model,
+                        contents=contents,
+                        config=generation_config, 
+                    )
+                    
+                    response_text = response.text if response.text else ""
+                    session.add_message("assistant", response_text)
+                    return response_text
 
-            except (ClientError, ServerError) as e:
-
-                if e.code in [429, 503]:
-                    logger.warning(f"Rate limit/Error hit on {model} (Status: {e.code}). Falling back...")
-                    last_exception = e
-                    continue # Try next model
-                
-                # Treat other 5xx errors as retriable if you want, or raise them. 
-                # For safety, we usually raise 4xx errors (like 400 Invalid Argument) immediately.
-                if isinstance(e, ClientError):
-                    logger.error(f"Non-retriable ClientError on {model}: {e}")
+                except (ClientError, ServerError) as e:
+                    if e.code in [429, 503]:
+                        logger.warning(f"Rate limit/Error hit on {model} via {client_name} key (Status: {e.code}). Falling back...")
+                        last_exception = e
+                        continue # Try next client, then next model
+                    
+                    if isinstance(e, ClientError):
+                        logger.error(f"Non-retriable ClientError on {model} via {client_name}: {e}")
+                        raise e
+                    
+                    logger.error(f"Non-retriable ServerError on {model} via {client_name}: {e}")
                     raise e
-                
-                # If it's a ServerError other than 503, we might want to continue or raise.
-                # Currently your logic raises non-503s here, which is fine:
-                logger.error(f"Non-retriable ServerError on {model}: {e}")
-                raise e
 
-            except Exception as e:
-                logger.error(f"Unexpected error on {model}: {e}")
-                last_exception = e
-                continue
+                except Exception as e:
+                    logger.error(f"Unexpected error on {model} via {client_name}: {e}")
+                    last_exception = e
+                    continue
 
         # If we exit the loop, all models failed
         error_msg = f"All models exhausted. Last error: {str(last_exception)}"
@@ -468,10 +465,10 @@ class BaseLLMModel:
         max_output_tokens: Optional[int] = 2048,
         use_chat_history: bool = True,
         attachments: Optional[List[types.File]] = None
-        
     ) -> AsyncIterator[str]:
         """
-        Stream a response as text deltas with cascading fallback support.
+        Stream a response as text deltas with cascading fallback support 
+        across both API keys and models.
         """
         session = self.get_session(session_id)
         if session is None:
@@ -493,7 +490,6 @@ class BaseLLMModel:
             "temperature": temperature if temperature is not None else self.default_temperature,
             "top_p": top_p if top_p is not None else self.top_p,
             "top_k": top_k if top_k is not None else self.top_k,
-            # Note: Ensure 'thinking_config' is supported by Flash/Lite or handle potential warnings
             "thinking_config": types.ThinkingConfig(thinking_budget=0),
         }
         
@@ -510,64 +506,64 @@ class BaseLLMModel:
         # === CASCADE LOOP ===
         accumulated = []
         last_exception = None
-        
-        # We need to know if we successfully started streaming to avoid duplicates
         stream_completed_successfully = False
 
+        # Outer loop: Try Flash first, then Lite
         for model in self.fallback_chain:
-            has_yielded_content = False # Track if this specific model output anything
             
-            try:
-                logger.info(f"Attempting stream with model: {model}")
+            # Inner loop: Try Free key first, then Paid key
+            for client_name, client in self.clients:
+                has_yielded_content = False 
                 
-                # Get the stream iterator
-                stream = await self.client.aio.models.generate_content_stream(
-                    model=model,
-                    contents=contents,
-                    config=generation_config,
-                )
-
-                async for chunk in stream:
-                    delta = getattr(chunk, "text", None)
-                    if not delta:
-                        continue
+                try:
+                    logger.info(f"Attempting stream with model: {model} using {client_name} key")
                     
-                    # If we get here, the model is working.
-                    has_yielded_content = True
-                    accumulated.append(delta)
-                    yield delta
-                
-                # If we finish the loop, we are done
-                stream_completed_successfully = True
-                break
+                    # Get the stream iterator using the specific client from the loop
+                    stream = await client.aio.models.generate_content_stream(
+                        model=model,
+                        contents=contents,
+                        config=generation_config,
+                    )
 
-            except (ClientError, ServerError) as e:
-                # 429 (Too Many Requests) or 503 (Service Unavailable)
-                if e.code in [429, 503]:
-                    if has_yielded_content:
-                        # CRITICAL: If we already sent text to the frontend, we cannot 
-                        # cleanly switch to a new model (it would restart the sentence).
-                        # We must raise the error.
-                        logger.error(f"Rate limit hit mid-stream on {model}. Cannot fallback.")
+                    async for chunk in stream:
+                        delta = getattr(chunk, "text", None)
+                        if not delta:
+                            continue
+                        
+                        has_yielded_content = True
+                        accumulated.append(delta)
+                        yield delta
+                    
+                    # If we finish the stream loop successfully
+                    stream_completed_successfully = True
+                    break # Break out of the inner client loop
+
+                except (ClientError, ServerError) as e:
+                    if e.code in [429, 503]:
+                        if has_yielded_content:
+                            # Cannot cleanly switch to a new client/model mid-sentence
+                            logger.error(f"Rate limit hit mid-stream on {model} via {client_name}. Cannot fallback.")
+                            raise e
+                        
+                        logger.warning(f"Rate limit hit on {model} via {client_name} (start of stream). Falling back...")
+                        last_exception = e
+                        continue # Try the next client
+                    else:
+                        logger.error(f"Non-retriable error on {model} via {client_name}: {e}")
                         raise e
-                    
-                    # Otherwise, clean retry
-                    logger.warning(f"Rate limit hit on {model} (start of stream). Falling back...")
+                        
+                except Exception as e:
+                    if has_yielded_content:
+                        logger.error(f"Error mid-stream on {model} via {client_name}: {e}")
+                        raise e
+                        
+                    logger.error(f"Unexpected error on {model} via {client_name}: {e}")
                     last_exception = e
                     continue
-                else:
-                    # Non-retriable error (e.g., Invalid Argument)
-                    logger.error(f"Non-retriable error on {model}: {e}")
-                    raise e
-                    
-            except Exception as e:
-                if has_yielded_content:
-                    logger.error(f"Error mid-stream on {model}: {e}")
-                    raise e
-                    
-                logger.error(f"Unexpected error on {model}: {e}")
-                last_exception = e
-                continue
+
+            # Check if the inner loop succeeded. If yes, break the outer loop too.
+            if stream_completed_successfully:
+                break
 
         # 4. Finalize
         if stream_completed_successfully:
@@ -575,8 +571,7 @@ class BaseLLMModel:
             session.add_message("assistant", final_text)
             logger.info(f"Streamed response for session {session_id} with {len(accumulated)} chunks")
         else:
-            # If we fall through the loop without success
-            error_msg = f"All models exhausted for streaming. Last error: {str(last_exception)}"
+            error_msg = f"All models and keys exhausted for streaming. Last error: {str(last_exception)}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
@@ -592,7 +587,6 @@ class BaseLLMModel:
         max_output_tokens: Optional[int] = 2048,
         use_chat_history: bool = True,
         attachments: Optional[List[types.File]] = None,
-
     ) -> AsyncIterator[str]:
         """
         Stream a response with additional prefixed context; saves final answer to history on completion.
@@ -626,7 +620,7 @@ class BaseLLMModel:
         """
         Generate a one-off response without session history.
         Useful for internal tasks like classification or summarization.
-        Includes cascading fallback support (Pro -> Flash -> Lite).
+        Includes cascading fallback support (Flash -> Lite).
         """
         
         # 1. Build Content Parts (Files + Text)
@@ -663,35 +657,38 @@ class BaseLLMModel:
         
         # 3. Cascade Loop
         last_exception = None
-        
+
         for model in self.fallback_chain:
-            try:
-                logger.info(f"Attempting stateless generation with model: {model}")
-                
-                # Call Model (Stateless)
-                response = await self.client.aio.models.generate_content(
-                    model=model,
-                    contents=contents,
-                    config=generation_config,
-                )
-                
-                return response.text if response.text else ""
-            
-            except (ClientError, ServerError) as e:
-                # Check for Rate Limit (429) or Service Unavailable (503)
-                if e.code in [429, 503]:
-                    logger.warning(f"Stateless rate limit hit on {model} (Status: {e.code}). Falling back...")
-                    last_exception = e
-                    continue # Try next model
-                else:
-                    # Non-retriable error
-                    logger.error(f"Stateless non-retriable error on {model}: {e}")
-                    raise e
+            for client_name, client in self.clients:
+                try:
+                    logger.info(f"Attempting generation with model: {model} using {client_name} key")
                     
-            except Exception as e:
-                logger.error(f"Stateless unexpected error on {model}: {e}")
-                last_exception = e
-                continue
+                    response = await client.aio.models.generate_content(
+                        model=model,
+                        contents=contents,
+                        config=generation_config, 
+                    )
+                    
+                    return response.text if response.text else ""
+
+                except (ClientError, ServerError) as e:
+                    if e.code in [429, 503]:
+                        logger.warning(f"Rate limit/Error hit on {model} via {client_name} key (Status: {e.code}). Falling back...")
+                        last_exception = e
+                        continue # Try next client, then next model
+                    
+                    if isinstance(e, ClientError):
+                        logger.error(f"Non-retriable ClientError on {model} via {client_name}: {e}")
+                        raise e
+                    
+                    logger.error(f"Non-retriable ServerError on {model} via {client_name}: {e}")
+                    raise e
+
+                except Exception as e:
+                    logger.error(f"Unexpected error on {model} via {client_name}: {e}")
+                    last_exception = e
+                    continue
+        
 
         # If we fall through the loop without success
         error_msg = f"All models exhausted for stateless generation. Last error: {str(last_exception)}"

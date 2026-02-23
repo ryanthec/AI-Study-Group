@@ -451,7 +451,14 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
         chatService.sendMessage(ws, text, 'public');
       }
 
-      setInputValue('');
+      // Sticky mention: keep the mention if the user is in public mode
+      const mentionMatch = inputValue.match(/^(@\w+)\s/);
+      if (chatMode === 'public' && mentionMatch) {
+        setInputValue(`${mentionMatch[1]} `);
+      } else {
+        setInputValue('');
+      }
+
       setAttachments([]);
 
     } catch (error) {
