@@ -22,6 +22,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
 
   useEffect(() => {
     localStorage.setItem('app-theme-mode', themeMode);
+    document.documentElement.setAttribute('data-theme', themeMode);
   }, [themeMode]);
 
   const toggleTheme = () => {
@@ -33,11 +34,13 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
     token: {
       // Base colors for dark/light mode
       colorBgBase: themeMode === 'light' ? '#ffffff' : '#141414',
-      colorTextBase: themeMode === 'light' ? '#000000' : '#ffffff',
-      
+      colorTextBase: themeMode === 'light' ? '#111827' : '#ffffff',
+      colorTextSecondary: themeMode === 'light' ? '#374151' : '#A6A6A6',
+
+
       // ✅ Your custom brand colors (from your original theme)
-      colorPrimary: '#1890ff',
-      colorSuccess: '#52c41a',
+      colorPrimary: themeMode === 'light' ? '#059669' : '#10B981',
+      colorSuccess: '#10B981', // Changed to neon green to match futuristic theme
       colorWarning: '#faad14',
       colorError: '#ff4d4f',
       borderRadius: 6,

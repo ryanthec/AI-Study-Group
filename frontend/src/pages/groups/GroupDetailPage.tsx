@@ -27,7 +27,7 @@ import { useTheme } from '../../hooks/useTheme';
 
 
 export const GroupDetailPage: React.FC = () => {
-  
+
   const navigate = useNavigate();
   const { user } = useAuth();
   const { isDark } = useTheme();
@@ -65,7 +65,7 @@ export const GroupDetailPage: React.FC = () => {
   const handleConfirmExit = () => {
     setIsGameActive(false); // Disable guard
     setIsModalVisible(false);
-    
+
     // Resume Navigation
     if (blocker.state === "blocked") {
       blocker.proceed();
@@ -157,27 +157,27 @@ export const GroupDetailPage: React.FC = () => {
 
   const handleBackToGroups = () => {
     if (isGameActive) {
-        // Trigger the blocker logic manually or just use the modal directly
-        Modal.confirm({
-            title: 'Leave Game?',
-            content: 'If you leave now, your progress will be lost.',
-            okText: 'Leave',
-            okType: 'danger',
-            onOk: () => navigate('/groups')
-        });
+      // Trigger the blocker logic manually or just use the modal directly
+      Modal.confirm({
+        title: 'Leave Game?',
+        content: 'If you leave now, your progress will be lost.',
+        okText: 'Leave',
+        okType: 'danger',
+        onOk: () => navigate('/groups')
+      });
     } else {
-        navigate('/groups');
+      navigate('/groups');
     }
   };
 
   const renderContent = () => {
     switch (activeTab) {
       case 'chat':
-        return <ChatTab 
-            groupId={Number(groupId)} 
-            // Receive the list from ChatBox -> ChatTab -> Here
-            onOnlineUsersUpdate={(users) => setOnlineUsers(users)} 
-          />;
+        return <ChatTab
+          groupId={Number(groupId)}
+          // Receive the list from ChatBox -> ChatTab -> Here
+          onOnlineUsersUpdate={(users) => setOnlineUsers(users)}
+        />;
       case 'documents':
         return (
           <DocumentsTab
@@ -195,12 +195,12 @@ export const GroupDetailPage: React.FC = () => {
         );
       case 'quizzes':
         return <QuizTab groupId={Number(groupId)} />;
-      
+
       case 'games':
-        return <FlashcardGameTab 
-                groupId={Number(groupId)} 
-                setGameActive={setIsGameActive} />;
-        
+        return <FlashcardGameTab
+          groupId={Number(groupId)}
+          setGameActive={setIsGameActive} />;
+
       case 'details':
       default:
         return (
@@ -219,84 +219,84 @@ export const GroupDetailPage: React.FC = () => {
     <>
       <Navbar />
 
-      <VoiceChatProvider 
-        groupId={groupId!} 
-        userId={user?.id || ''} 
+      <VoiceChatProvider
+        groupId={groupId!}
+        userId={user?.id || ''}
         userName={user?.username || 'User'}
       >
 
-      {/* Sidebar Navigation */}
-      {!loading && group && (
-        <StudyGroupSidebar
-          groupId={Number(groupId)}
-          group={group}
-          activeTab={activeTab}
-          onTabChange={handleTabChange}
-          onEdit={handleEdit}
-          onInvite={() => setInviteModalVisible(true)}
-          onDelete={handleDelete}
-          onLeave={handleLeave}
-          onBackToGroups={handleBackToGroups}
-          onlineUsers={onlineUsers}
-        />
-      )}
-
-      {/* Main Content - with proper margin for sidebar AND navbar */}
-      <div
-        style={{
-          marginLeft: 200,
-          marginTop: 0,
-          minHeight: 'calc(100vh - 64px)',
-          background: isDark ? '#141414' : '#f5f5f5',
-          padding: 0,
-        }}
-      >
-        {loading ? (
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              minHeight: '400px',
-            }}
-          >
-            <Spin size="large" />
-          </div>
-        ) : (
-          renderContent()
+        {/* Sidebar Navigation */}
+        {!loading && group && (
+          <StudyGroupSidebar
+            groupId={Number(groupId)}
+            group={group}
+            activeTab={activeTab}
+            onTabChange={handleTabChange}
+            onEdit={handleEdit}
+            onInvite={() => setInviteModalVisible(true)}
+            onDelete={handleDelete}
+            onLeave={handleLeave}
+            onBackToGroups={handleBackToGroups}
+            onlineUsers={onlineUsers}
+          />
         )}
-      </div>
 
-      {/* Invite Modal */}
-      {group && (
-        <InviteMemberModal
-          visible={inviteModalVisible}
-          groupId={Number(groupId)}
-          onClose={() => setInviteModalVisible(false)}
-          onSuccess={() => {
-            // loadMembers();
-            setInviteModalVisible(false);
+        {/* Main Content - with proper margin for sidebar AND navbar */}
+        <div
+          style={{
+            marginLeft: 200,
+            marginTop: 0,
+            minHeight: 'calc(100vh - 64px)',
+            background: 'var(--canvas-bg)',
+            padding: 0,
           }}
-        />
-      )}
+        >
+          {loading ? (
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                minHeight: '400px',
+              }}
+            >
+              <Spin size="large" />
+            </div>
+          ) : (
+            renderContent()
+          )}
+        </div>
 
-      {/* GAME EXIT CONFIRMATION MODAL */}
-      <Modal
-        title="Leave Game?"
-        open={isModalVisible}
-        onOk={handleConfirmExit}
-        onCancel={handleCancelExit}
-        okText="Leave"
-        cancelText="Stay"
-        okButtonProps={{ danger: true }}
-        styles={{ 
+        {/* Invite Modal */}
+        {group && (
+          <InviteMemberModal
+            visible={inviteModalVisible}
+            groupId={Number(groupId)}
+            onClose={() => setInviteModalVisible(false)}
+            onSuccess={() => {
+              // loadMembers();
+              setInviteModalVisible(false);
+            }}
+          />
+        )}
+
+        {/* GAME EXIT CONFIRMATION MODAL */}
+        <Modal
+          title="Leave Game?"
+          open={isModalVisible}
+          onOk={handleConfirmExit}
+          onCancel={handleCancelExit}
+          okText="Leave"
+          cancelText="Stay"
+          okButtonProps={{ danger: true }}
+          styles={{
             mask: { backdropFilter: 'blur(4px)' }
-        }}
-      >
-        <p>You are currently in an active game. If you leave now, your progress will not be saved.</p>
-      </Modal>
+          }}
+        >
+          <p>You are currently in an active game. If you leave now, your progress will not be saved.</p>
+        </Modal>
 
-      
+
       </VoiceChatProvider>
     </>
   );

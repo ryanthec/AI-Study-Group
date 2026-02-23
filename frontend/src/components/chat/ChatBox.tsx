@@ -121,7 +121,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
     otherBubble: isDark ? '#2b2d31' : '#e3e5e8',
     aiBubble: isDark ? '#2b2d31' : '#f2f3f5',
     ownText: '#ffffff',
-    otherText: isDark ? '#dbdee1' : '#313338',
+    otherText: isDark ? '#b8b9bbff' : '#313338',
     secondaryText: isDark ? '#949ba4' : '#3e3e41ff',
     border: isDark ? '#1e1f22' : '#e3e5e8',
 

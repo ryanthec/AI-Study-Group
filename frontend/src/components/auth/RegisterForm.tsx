@@ -158,7 +158,7 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSwitchToLogin }) =
         <div style={{ textAlign: 'center' }}>
           <Text type="secondary">
             Already have an account?{' '}
-            <Link onClick={onSwitchToLogin} style={{ color: '#1890ff' }}>
+            <Link onClick={onSwitchToLogin} style={{ color: 'var(--accent-color)' }}>
               Sign in here
             </Link>
           </Text>

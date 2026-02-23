@@ -1,8 +1,8 @@
 import React from 'react';
 import { Card, Descriptions, Tag, Space, Avatar, List, Empty, Spin } from 'antd';
-import { CrownOutlined, UserOutlined, GlobalOutlined, LockOutlined} from '@ant-design/icons';
+import { CrownOutlined, UserOutlined, GlobalOutlined, LockOutlined } from '@ant-design/icons';
 import type { StudyGroup } from '../../types/studyGroup.types';
-import {useTheme} from "../../hooks/useTheme";
+import { useTheme } from "../../hooks/useTheme";
 
 interface GroupMember {
   id: string;
@@ -29,10 +29,10 @@ export const GroupDetailsTab: React.FC<GroupDetailsTabProps> = ({
   const { isDark } = useTheme();
 
   const cardStyle = {
-    boxShadow: isDark 
-      ? '0 2px 8px rgba(0, 0, 0, 0.45)' 
+    boxShadow: isDark
+      ? '0 2px 8px rgba(0, 0, 0, 0.45)'
       : '0 1px 4px rgba(0, 0, 0, 0.2)',
-    border: isDark ? '1px solid #434343' : '1px solid #9fa1a3ff',
+    border: '1px solid var(--border-color)',
     borderRadius: '8px',
   };
 
@@ -59,9 +59,9 @@ export const GroupDetailsTab: React.FC<GroupDetailsTabProps> = ({
 
           <Descriptions.Item label="Visibility">
             {group.is_public ? (
-                <Tag icon={<GlobalOutlined />} color="cyan">Public</Tag>
+              <Tag icon={<GlobalOutlined />} color="cyan">Public</Tag>
             ) : (
-                <Tag icon={<LockOutlined />} color="gold">Private</Tag>
+              <Tag icon={<LockOutlined />} color="gold">Private</Tag>
             )}
           </Descriptions.Item>
 
@@ -93,7 +93,7 @@ export const GroupDetailsTab: React.FC<GroupDetailsTabProps> = ({
               <List.Item
                 style={{
                   padding: '12px 0',
-                  borderBottom: isDark ? '1px solid #434343' : '1px solid #9fa1a3ff',
+                  borderBottom: '1px solid var(--border-color)',
                 }}
               >
                 <List.Item.Meta

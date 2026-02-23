@@ -16,7 +16,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     <AntLayout
       style={{
         minHeight: '100vh',
-        background: isDark ? '#141414' : '#f5f5f5', // ✅ Dynamic background
+        background: 'var(--canvas-bg)', // ✅ Dynamic background
         display: 'flex',
         flexDirection: 'column',
       }}
@@ -26,7 +26,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       <Content
         style={{
           padding: 24,
-          background: isDark ? '#141414' : '#f5f5f5', // ✅ Dynamic background
+          background: 'var(--canvas-bg)', // ✅ Dynamic background
           display: 'flex',
           justifyContent: 'center',
         }}
@@ -35,12 +35,11 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
           style={{
             width: '100%',
             maxWidth: 1200,
-            background: isDark ? '#1f1f1f' : '#fff', // ✅ Dynamic container background
+            background: 'var(--nav-bg)', // ✅ Dynamic container background
             borderRadius: 8,
             padding: 24,
-            boxShadow: isDark 
-              ? '0 2px 8px rgba(0,0,0,0.45)' 
-              : '0 2px 8px rgba(0,0,0,0.15)', // ✅ Dynamic shadow
+            border: '1px solid var(--border-color)', // ✅ Added explicit border
+            boxShadow: 'var(--card-shadow)', // ✅ Dynamic shadow
           }}
         >
           {children}

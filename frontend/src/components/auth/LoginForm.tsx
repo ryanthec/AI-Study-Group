@@ -75,7 +75,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToRegister }) => {
               <Form.Item name="remember" valuePropName="checked" noStyle>
                 <Checkbox>Remember me</Checkbox>
               </Form.Item>
-              <Link href="#" style={{ color: '#1890ff' }}>
+              <Link href="#" style={{ color: 'var(--accent-color)' }}>
                 Forgot password?
               </Link>
             </div>
@@ -97,7 +97,7 @@ export const LoginForm: React.FC<LoginFormProps> = ({ onSwitchToRegister }) => {
         <div style={{ textAlign: 'center' }}>
           <Text type="secondary">
             Don't have an account?{' '}
-            <Link onClick={onSwitchToRegister} style={{ color: '#1890ff' }}>
+            <Link onClick={onSwitchToRegister} style={{ color: 'var(--accent-color)' }}>
               Sign up now
             </Link>
           </Text>

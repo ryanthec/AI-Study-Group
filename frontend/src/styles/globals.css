@@ -12,7 +12,7 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #f5f5f5;
+  background-color: var(--canvas-bg);
 }
 
 code {
@@ -41,7 +41,17 @@ code {
 
 /* Ant Design customizations */
 .ant-layout {
-  background: #f5f5f5 !important;
+  background: var(--canvas-bg) !important;
+}
+
+.ant-layout-header {
+  border-bottom: 1px solid var(--border-color) !important;
+  background-color: var(--nav-bg) !important;
+}
+
+.ant-layout-sider {
+  border-right: 1px solid var(--border-color) !important;
+  background-color: var(--nav-bg) !important;
 }
 
 .ant-layout-header {
@@ -60,7 +70,27 @@ code {
 }
 
 .ant-card-head {
-  border-bottom: 1px solid #f0f0f0 !important;
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+/* Descriptions component (Group Details Table) */
+.ant-descriptions-bordered .ant-descriptions-view {
+  border: 1px solid var(--border-color) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+}
+
+.ant-descriptions-bordered .ant-descriptions-row {
+  border-bottom: 1px solid var(--border-color) !important;
+}
+
+.ant-descriptions-bordered .ant-descriptions-item-label,
+.ant-descriptions-bordered .ant-descriptions-item-content {
+  border-right: 1px solid var(--border-color) !important;
+}
+
+.ant-descriptions-bordered .ant-descriptions-item-label {
+  background-color: var(--canvas-bg) !important;
 }
 
 .ant-btn {
@@ -68,14 +98,13 @@ code {
 }
 
 .ant-btn-primary {
-  background: #1890ff !important;
-  border-color: #1890ff !important;
+  background: var(--accent-color) !important;
+  border-color: var(--accent-color) !important;
 }
 
 .ant-btn-primary:hover,
 .ant-btn-primary:focus {
-  background: #40a9ff !important;
-  border-color: #40a9ff !important;
+  opacity: 0.9;
 }
 
 .ant-input,
@@ -85,8 +114,8 @@ code {
 
 .ant-input:focus,
 .ant-input-focused {
-  border-color: #1890ff !important;
-  box-shadow: 0 0 0 2px rgba(24, 144, 255, 0.2) !important;
+  border-color: var(--accent-color) !important;
+  box-shadow: 0 0 0 1px var(--accent-color) !important;
 }
 
 /* Custom utility classes */
@@ -105,6 +134,8 @@ code {
 .full-height {
   height: 100vh;
 }
+
+
 
 .flex-center {
   display: flex;
@@ -149,6 +180,7 @@ code {
     opacity: 0;
     transform: translateY(10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -163,8 +195,8 @@ code {
   from {
     transform: translateX(-100%);
   }
+
   to {
     transform: translateX(0);
   }
 }
-

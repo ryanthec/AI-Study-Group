@@ -48,11 +48,9 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
   const { Text } = Typography;
 
   const sidebarStyle: React.CSSProperties = {
-    background: isDark ? '#1f1f1f' : '#fff',
-    borderRight: isDark ? '1px solid #434343' : '1px solid #f0f0f0',
-    boxShadow: isDark
-      ? '1px 0 4px rgba(0, 0, 0, 0.45)'
-      : '1px 0 4px rgba(0, 0, 0, 0.15)',
+    background: 'var(--nav-bg)',
+    borderRight: '1px solid var(--border-color)',
+    boxShadow: 'none',
     height: 'calc(100vh - 64px)',
     position: 'fixed',
     left: 0,
@@ -62,18 +60,18 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
   };
 
   // Colors for borders and backgrounds
-  const borderColor = isDark ? '#434343' : '#9fa1a3ff';
-  const actionsBackground = isDark ? '#141414' : '#f5f5f5d8';
-  const headerBackground = isDark ? '#141414' : '#fff';
+  const borderColor = 'var(--border-color)';
+  const actionsBackground = 'var(--nav-bg)';
+  const headerBackground = 'var(--nav-bg)';
 
   // Popup specific colors
   const popupColors = {
-    bg: isDark ? '#1f1f1f' : '#ffffff',
-    text: isDark ? '#e6e6e6' : '#262626',
-    border: isDark ? '#434343' : '#f0f0f0',
-    secondaryText: isDark ? '#a6a6a6' : '#999999',
-    hoverBg: isDark ? '#262626' : '#f6f6f6',
-    hoverText: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.85)',
+    bg: 'var(--nav-bg)',
+    text: 'var(--text-primary)',
+    border: 'var(--border-color)',
+    secondaryText: 'var(--text-secondary)',
+    hoverBg: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.02)',
+    hoverText: 'var(--accent-color)',
   };
 
   if (!group) return null;
@@ -84,18 +82,18 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
   // (User List)
   const onlineUsersList = (
     <div style={{ maxHeight: '300px', overflowY: 'auto', minWidth: '220px' }}>
-      <div 
-        style={{ 
-          padding: '10px 16px', 
-          borderBottom: `1px solid ${popupColors.border}`, 
-          marginBottom: '4px' 
+      <div
+        style={{
+          padding: '10px 16px',
+          borderBottom: `1px solid ${popupColors.border}`,
+          marginBottom: '4px'
         }}
       >
         <Text strong style={{ color: popupColors.text }}>
           Online Members ({onlineCount})
         </Text>
       </div>
-      
+
       {onlineCount === 0 ? (
         <div style={{ padding: '16px', color: popupColors.secondaryText, textAlign: 'center' }}>
           No one else is online
@@ -108,10 +106,10 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
           renderItem={(user: any) => (
             <List.Item style={{ padding: '8px 16px' }}>
               <Space>
-                <Avatar 
-                  src={user.avatar} 
+                <Avatar
+                  src={user.avatar}
                   size="small"
-                  style={{ backgroundColor: '#1890ff', verticalAlign: 'middle' }}
+                  style={{ backgroundColor: 'var(--accent-color)', verticalAlign: 'middle' }}
                 >
                   {user.firstName?.[0]?.toUpperCase() || user.username?.[0]?.toUpperCase()}
                 </Avatar>
@@ -163,7 +161,7 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
       label: 'Flashcard Battle',
       onClick: () => onTabChange('games'),
     }
-    
+
   ];
 
   return (
@@ -197,46 +195,48 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
         <h3 style={{ margin: '0 0 8px 0', wordBreak: 'break-word', fontSize: '18px', color: popupColors.text }}>
           {group.name}
         </h3>
-        
+
         {/* The Hoverable Area */}
-        <Tooltip 
-            title={onlineUsersList} 
-            placement="bottomLeft" 
-            color={popupColors.bg} 
-            trigger={['hover', 'click']}
-            styles={{ body: { 
-              padding: 0, 
-              borderRadius: '8px', 
+        <Tooltip
+          title={onlineUsersList}
+          placement="bottomLeft"
+          color={popupColors.bg}
+          trigger={['hover', 'click']}
+          styles={{
+            body: {
+              padding: 0,
+              borderRadius: '8px',
               boxShadow: '0 3px 6px -4px rgba(0,0,0,0.12), 0 6px 16px 0 rgba(0,0,0,0.08), 0 9px 28px 8px rgba(0,0,0,0.05)',
               background: popupColors.bg,
-              } 
-            }}
+            }
+          }}
         >
-            <div style={{ 
-                display: 'inline-flex', 
-                alignItems: 'center', 
-                cursor: 'pointer', 
-                padding: '6px 10px', 
-                borderRadius: '6px',
-                background: isDark ? 'rgba(255,255,255,0.08)' : '#f0f0f0',
-                transition: 'all 0.3s',
-                userSelect: 'none'
+          <div style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            cursor: 'pointer',
+            padding: '6px 10px',
+            borderRadius: '6px',
+            background: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
+            transition: 'all 0.3s',
+            userSelect: 'none',
+            border: '1px solid var(--border-color)'
+          }}>
+            <Badge color="var(--accent-color)" style={{ marginRight: 8 }} />
+            <span style={{
+              fontSize: '13px',
+              color: 'var(--text-primary)',
+              fontWeight: 500
             }}>
-                <Badge status="success" style={{ marginRight: 8 }} />
-                <span style={{ 
-                    fontSize: '13px', 
-                    color: isDark ? 'rgba(255,255,255,0.85)' : 'rgba(0,0,0,0.85)', 
-                    fontWeight: 500 
-                }}>
-                    {onlineCount} Online
-                </span>
-                <TeamOutlined style={{ marginLeft: 8, color: popupColors.secondaryText, fontSize: '12px' }} />
-            </div>
+              {onlineCount} Online
+            </span>
+            <TeamOutlined style={{ marginLeft: 8, color: popupColors.secondaryText, fontSize: '12px' }} />
+          </div>
         </Tooltip>
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
-        
+
         {/* Navigation Menu */}
         <Menu
           mode="vertical"
@@ -248,12 +248,12 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
           }}
         />
       </div>
-      
+
       {/* Voice Section Area */}
-      <div style={{ 
-          borderTop: `1px solid ${borderColor}`, 
-          background: actionsBackground, 
-          padding: '0 0 8px 0' // Padding handled inside component or here
+      <div style={{
+        borderTop: `1px solid ${borderColor}`,
+        background: actionsBackground,
+        padding: '0 0 8px 0' // Padding handled inside component or here
       }}>
         <VoiceSidebarSection />
       </div>

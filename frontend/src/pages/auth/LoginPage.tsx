@@ -10,14 +10,14 @@ const pageStyle: React.CSSProperties = {
   alignItems: 'center',
   justifyContent: 'center',
   padding: 24,
-  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  background: 'var(--canvas-bg)',
 };
 
 const cardStyle: React.CSSProperties = {
   width: '100%',
   maxWidth: 480,
   borderRadius: 12,
-  boxShadow: '0 20px 40px rgba(0,0,0,0.12)',
+  border: '1px solid var(--border-color)',
 };
 
 export const LoginPage: React.FC = () => {

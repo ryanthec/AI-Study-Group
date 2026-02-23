@@ -49,13 +49,13 @@ const NavButton: React.FC<NavButtonProps> = ({ label, icon, onClick, isDark }) =
         height: '36px',
         fontWeight: 500,
         transition: 'all 0.2s ease',
-        // Text Color: Blue on hover, Standard otherwise
+        // Text Color: Accent on hover, Standard otherwise
         color: isHovered
-          ? (isDark ? '#177ddc' : '#1890ff') 
-          : (isDark ? 'rgba(255, 255, 255, 0.85)' : 'rgba(0, 0, 0, 0.88)'),
-        // Background: Subtle blue on hover, Transparent otherwise (regardless of being "active")
+          ? 'var(--accent-color)'
+          : 'var(--text-primary)',
+        // Background: Subtle accent on hover, Transparent otherwise
         backgroundColor: isHovered
-          ? (isDark ? 'rgba(23, 125, 220, 0.15)' : '#e6f7ff')
+          ? (isDark ? 'rgba(16, 185, 129, 0.15)' : 'rgba(5, 150, 105, 0.1)')
           : 'transparent',
       }}
     >
@@ -101,9 +101,9 @@ export const Navbar: React.FC = () => {
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '0 24px',
-    background: isDark ? '#1f1f1f' : '#fff',
-    borderBottom: isDark ? '1px solid #434343' : '1px solid #e0e0e0',
-    boxShadow: isDark ? '0 2px 8px rgba(0,0,0,0.45)' : '0 1px 4px rgba(0,0,0,0.08)',
+    background: 'var(--nav-bg)',
+    borderBottom: '1px solid var(--border-color)',
+    boxShadow: 'none',
     position: 'sticky',
     top: 0,
     zIndex: 1000,
@@ -118,7 +118,7 @@ export const Navbar: React.FC = () => {
           fontWeight: 700,
           cursor: 'pointer',
           whiteSpace: 'nowrap',
-          color: isDark ? '#fff' : '#1890ff',
+          color: 'var(--text-primary)',
           marginRight: '40px',
         }}
         onClick={() => navigate('/dashboard')}
@@ -127,7 +127,7 @@ export const Navbar: React.FC = () => {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', flex: 1, justifyContent: 'flex-end', minWidth: 0 }}>
-        
+
         {/* Navigation Buttons */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginRight: '24px' }}>
           {navItems.map((item) => (
