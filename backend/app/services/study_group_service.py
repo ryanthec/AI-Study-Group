@@ -126,6 +126,14 @@ class StudyGroupService:
             message_type=MessageType.SYSTEM
         )
         db.add(welcome_msg)
+
+        bob_intro_msg = StudyGroupMessage(
+            group_id=db_group.id,
+            content="Hi everyone! I'm Bob the Bot, your friendly study assistant. Feel free to tag me using @Bob if you need any help!",
+            message_type=MessageType.AI_RESPONSE,
+            user_id=None
+        )
+        db.add(bob_intro_msg)
         
         db.commit()
         db.refresh(db_group)

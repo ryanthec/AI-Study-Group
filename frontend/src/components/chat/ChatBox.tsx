@@ -199,7 +199,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
           if (data.type === 'ai_typing') {
             setStreamingMessage({
               id: `streaming_${Date.now()}`,
-              username: 'TeachingAI',
+              username: 'Bob the Bot',
               content: '',
               isStreaming: true,
             });
@@ -382,7 +382,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
       const lastWord = textBeforeCursor.split(/\s/).pop() || '';
 
       if (lastWord.startsWith('@') && lastWord.length === 1) {
-        setAutocompleteOptions([{ value: '@TeachingAI' }]);
+        setAutocompleteOptions([{ value: '@Bob' }]);
         setShowAutocomplete(true);
       } else if (!lastWord.startsWith('@')) {
         setShowAutocomplete(false);
@@ -620,7 +620,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
                 color: isOwn ? colors.ownBubble : isAI ? '#7289da' : isDark ? '#f2f3f5' : '#313338',
               }}
             >
-              {isAI ? 'TeachingAI' : msg.user?.username || 'Unknown'}
+              {isAI ? 'Bob the Bot' : msg.user?.username || 'Unknown'}
             </Text>
 
             {isAI && (
@@ -670,7 +670,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
 
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 2 }}>
-            <Text strong style={{ fontSize: '15px', color: '#7289da' }}>TeachingAI</Text>
+            <Text strong style={{ fontSize: '15px', color: '#7289da' }}>Bob the Bot</Text>
             <Tag color="purple" style={{ fontSize: '10px', padding: '0 4px' }}>BOT</Tag>
             <LoadingOutlined style={{ color: colors.secondaryText, fontSize: '12px' }} />
           </div>
@@ -789,7 +789,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
         <div style={{ padding: '8px 16px', borderBottom: `1px solid ${theme.border}`, background: theme.messageBg, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
           <div style={{ width: 8, height: 8, borderRadius: '50%', background: connected ? theme.onlineGreen : theme.offlineRed }} />
           <Text style={{ fontSize: '14px', color: theme.secondaryText }}>{connected ? 'Connected' : 'Disconnected'}</Text>
-          {streamingMessage && (<> <div style={{ width: 4, height: 4, borderRadius: '50%', background: theme.secondaryText, margin: '0 4px', animation: 'pulse 1.5s infinite' }} /> <Text style={{ fontSize: '12px', color: theme.secondaryText, fontStyle: 'italic' }}><RobotOutlined /> TeachingAI is typing...</Text> </>)}
+          {streamingMessage && (<> <div style={{ width: 4, height: 4, borderRadius: '50%', background: theme.secondaryText, margin: '0 4px', animation: 'pulse 1.5s infinite' }} /> <Text style={{ fontSize: '12px', color: theme.secondaryText, fontStyle: 'italic' }}><RobotOutlined /> Bob the Bot is typing...</Text> </>)}
         </div>
 
         {/* Messages */}
@@ -813,7 +813,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
                 {mode === 'public' ? (
                   <>
                     <Text type="secondary" style={{ fontSize: '16px', color: theme.secondaryText }}>No messages yet. Start the conversation!</Text>
-                    <Text type="secondary" style={{ fontSize: '14px', color: theme.secondaryText, marginTop: 8 }}>Type <Tag>@TeachingAI</Tag> to ask the AI assistant</Text>
+                    <Text type="secondary" style={{ fontSize: '14px', color: theme.secondaryText, marginTop: 8 }}>Type <Tag>@Bob</Tag> to ask the AI assistant</Text>
                   </>
                 ) : (
                   <>
@@ -844,7 +844,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
               {autocompleteOptions.map((option) => (
                 <div key={option.value} onClick={() => handleAutocompleteSelect(option.value)} onMouseEnter={(e) => (e.currentTarget.style.background = isDark ? '#2e3035' : '#f9f9f9')} onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')} style={{ padding: '12px 16px', cursor: 'pointer', color: theme.otherText, display: 'flex', alignItems: 'center', gap: 8, transition: 'background 0.2s' }}>
                   <RobotOutlined style={{ color: '#7289da', fontSize: '16px' }} />
-                  <Text style={{ color: theme.otherText, fontWeight: 500 }}>TeachingAI</Text>
+                  <Text style={{ color: theme.otherText, fontWeight: 500 }}>Bob the Bot</Text>
                   <Tag color="purple" style={{ fontSize: '10px', padding: '0 4px', marginLeft: 'auto' }}>BOT</Tag>
                 </div>
               ))}
@@ -907,7 +907,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
                   <Button type="text" icon={<BulbOutlined />} onClick={toggleSocratic} loading={configLoading} style={{ color: agentConfig?.socratic_prompting ? '#fff' : theme.secondaryText, backgroundColor: agentConfig?.socratic_prompting ? theme.activeSocratic : 'transparent', borderRadius: '6px', padding: '4px 8px', transition: 'all 0.2s' }} />
                 </Tooltip>
 
-                <Input.TextArea ref={inputRef} value={inputValue} onChange={(e) => handleInputChange(e.target.value)} onKeyDown={handleKeyDown} disabled={!connected} placeholder={mode === 'private' ? "Ask your private AI tutor..." : `Message #${groupId} (Type @ to mention TeachingAI)`} variant="borderless" autoSize={{ minRows: 1, maxRows: 3 }} style={{ flex: 1, background: 'transparent', color: theme.otherText, fontSize: '15px', padding: '11px 0', resize: 'none' }} />
+                <Input.TextArea ref={inputRef} value={inputValue} onChange={(e) => handleInputChange(e.target.value)} onKeyDown={handleKeyDown} disabled={!connected} placeholder={mode === 'private' ? "Ask your private AI tutor..." : `Message #${groupId} (Type @ to mention Bob)`} variant="borderless" autoSize={{ minRows: 1, maxRows: 3 }} style={{ flex: 1, background: 'transparent', color: theme.otherText, fontSize: '15px', padding: '11px 0', resize: 'none' }} />
 
                 <Button type="text" icon={<SendOutlined />} onClick={handleSend} disabled={!connected || (!inputValue.trim() && attachments.length === 0)} style={{ color: (inputValue.trim() || attachments.length > 0) ? theme.ownBubble : theme.secondaryText, padding: '4px 8px' }} />
               </>

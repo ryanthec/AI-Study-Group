@@ -9,12 +9,12 @@ from ..models.quiz import Quiz, QuizAttempt
 
 logger = logging.getLogger(__name__)
 
-GAP_ANALYSIS_SYSTEM_PROMPT = """You are an expert academic tutor.
-Analyze the student's quiz performance and generate a comprehensive "Knowledge Gap Report".
+GAP_ANALYSIS_SYSTEM_PROMPT = """You are a friendly, encouraging expert academic tutor.
+Analyze the quiz performance and generate a comprehensive "Knowledge Gap Report" ADDRESSED DIRECTLY TO THE STUDENT (use "you" and "your").
 
 INPUT DATA:
 - Quiz Questions & Correct Answers
-- Student's Incorrect Answers
+- Your (the student's) Incorrect Answers
 - Source Documents (if any)
 
 OUTPUT FORMAT:
@@ -23,23 +23,23 @@ Return a strictly formatted Markdown report. Do NOT use code blocks for the whol
 # 📊 Performance Analysis
 
 ## 1. Executive Summary
-[Provide a 3-4 sentence overview of their performance, highlighting general strengths and the specific area where they struggled.]
+[Provide a friendly 3-4 sentence overview of their performance, highlighting general strengths and the specific areas where they struggled. Address the student directly, e.g., "You scored..."]
 
 ## 2. 🧠 Detailed Knowledge Gaps
 [For each major concept missed, create a subsection]
 
 ### • [Concept Name]
-**The Misconception:** [Explain what the student likely thought based on their wrong answer]
-**The Correct Concept:** [Deep dive into the correct logic, referencing source documents if available]
+**The Misconception:** [Explain what they likely thought based on their wrong answer, in a gentle and understanding way. E.g., "It looks like you might have confused..."]
+**The Correct Concept:** [Deep dive into the correct logic, referencing source documents if available. Explain it clearly directly to them.]
 **Example:** [Provide a concrete example to illustrate the rule]
 
 ## 3. 📝 Targeted Study Notes
-[Bulleted list of key facts, definitions, or formulas they need to memorize to fix these errors.]
+[Bulleted list of key facts, definitions, or formulas you recommend they memorize or review to fix these errors.]
 
 ## 4. 🎯 Recommended Focus
-[Specific advice on what to read or practice next.]
+[Specific, encouraging advice on what they should read or practice next.]
 
-TONE: Professional, encouraging, and detailed.
+TONE: Friendly, warm, encouraging, conversational, and detailed. ALWAYS address the user directly as "you". 
 """
 
 class GapAnalysisAgent:
@@ -103,24 +103,24 @@ class GapAnalysisAgent:
         doc_context_str = ", ".join(doc_names) if doc_names else "general knowledge (no docs attached)"
 
         prompt = f"""
-        Please generate a Gap Analysis Report for this student.
+        Please generate a friendly Gap Analysis Report addressed directly to the student.
         
         **Quiz Context**:
         - Topic: {quiz.title}
         - Source Material: {doc_context_str}
         - Score: {attempt.score}/{attempt.total_questions}
         
-        **Mistakes Made**:
+        **Mistakes You Made**:
         {mistakes_text}
         
-        Generate the study notes and analysis now.
+        Generate the study notes and analysis now, remembering to address the student as "you".
         """
 
         # 4. Call LLM
         response = await self.base_llm.generate_stateless_response(
             prompt=prompt,
             system_prompt=GAP_ANALYSIS_SYSTEM_PROMPT,
-            max_output_tokens=3000,
+            max_output_tokens=4000,
             temperature=0.5,
             attachments=uploaded_files
         )

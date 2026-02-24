@@ -176,7 +176,7 @@ export const AgentSettingsTab: React.FC<AgentSettingsTabProps> = ({
         {/* Header */}
         <div>
           <Title level={3} style={{ margin: 0 }}>
-            <RobotOutlined /> TeachingAI Agent Settings
+            <RobotOutlined /> Bob Agent Settings
           </Title>
           <Text type="secondary">
             {isAdmin

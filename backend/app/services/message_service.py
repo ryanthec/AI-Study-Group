@@ -86,7 +86,7 @@ class MessageService:
             "created_at": message.created_at.isoformat() if message.created_at else None,
             "user": {
                 "id": str(user.id) if user else None,
-                "username": user.username if user else "TeachingAI", # Fallback for AI
+                "username": user.username if user else "Bob the Bot", # Fallback for AI
                 "avatar": user.avatar if user else None,
             } if user or message.message_type == MessageType.AI_RESPONSE else None
         }

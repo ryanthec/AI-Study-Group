@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Optional
 import json
 import asyncio
+import re
 from jose import jwt, JWTError
 from uuid import UUID
 
@@ -108,14 +109,13 @@ def fetch_quiz_context(db: Session, attempt_id: int, user_id: UUID) -> str:
 
 
 def detect_ai_mention(content: str) -> bool:
-    """Check if message mentions @TeachingAI"""
-    return "@TeachingAI" in content or "@teachingai" in content.lower()
+    """Check if message mentions @Bob"""
+    return "@Bob" in content or "@bob" in content.lower()
 
 def remove_ai_mention(content: str) -> str:
-    """Remove @TeachingAI mention from message"""
-    import re
-    # Remove @TeachingAI (case insensitive)
-    cleaned = re.sub(r'@TeachingAI\s*', '', content, flags=re.IGNORECASE)
+    """Remove @Bob mention from message"""
+    # Remove @Bob (case insensitive)
+    cleaned = re.sub(r'@Bob\s*', '', content, flags=re.IGNORECASE)
     return cleaned.strip()
 
 async def stream_ai_response(
@@ -163,7 +163,7 @@ async def stream_ai_response(
         # 3. Send "AI is typing" indicator
         typing_payload = {
             "type": "ai_typing",
-            "content": "TeachingAI is thinking...",
+            "content": "Bob the Bot is thinking...",
             "username": username
         }
 
@@ -504,7 +504,7 @@ async def summarise_missed_messages(
     formatted_msgs = []
     for m in messages:
         # Resolving username might require a join or helper, assuming simple access here
-        username = m.user.username if m.user else "TeachingAI"
+        username = m.user.username if m.user else "Bob the Bot"
         formatted_msgs.append({"username": username, "content": m.content})
 
     # 4. Generate
