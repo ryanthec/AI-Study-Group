@@ -11,7 +11,7 @@ export const authService = {
   },
 
   // Register user
-  register: async (userData: RegisterRequest): Promise<AuthResponse> => {
+  register: async (userData: RegisterRequest): Promise<{message: string}> => {
     try {
       const response = await api.post('/auth/register', userData);
       return response.data;
@@ -25,6 +25,12 @@ export const authService = {
       }
       throw new Error('Registration failed');
     }
+  },
+
+  // Verify email
+  verifyEmail: async (token: string): Promise<{message: string}> => {
+    const response = await api.get(`/auth/verify-email?token=${token}`);
+    return response.data;
   },
 
   // Get current user

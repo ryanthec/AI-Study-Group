@@ -16,7 +16,11 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSwitchToLogin }) =
 
   const onFinish = async (values: RegisterRequest) => {
     try {
-      await register(values);
+      // Modify this assuming your useAuth().register now just handles the API call
+      // and doesn't update the global isAuthenticated state
+      await register(values); 
+      message.success('Registration successful! Please check your email to verify your account.');
+      onSwitchToLogin(); // Send them to login screen to wait
     } catch (error: any) {
       message.error(error?.message || 'Registration failed');
     }

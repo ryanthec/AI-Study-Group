@@ -70,10 +70,6 @@ export const QuizResultView: React.FC<QuizResultViewProps> = ({
     neutralBg: isDark ? '#262626' : '#fafafa'
     };
 
-    const handleExplain = (questionIdx: number) => {
-    // Placeholder for future implementation
-    console.log(`Explain question ${questionIdx}`);
-    };
 
     const handleAnalyze = async () => {
         if (analysisText) {
@@ -220,18 +216,6 @@ export const QuizResultView: React.FC<QuizResultViewProps> = ({
                             }
                             <Text strong style={{ color: colors.text }}>Question {idx + 1}</Text>
                         </Space>
-                        <Button 
-                            size="small" 
-                            icon={<RobotOutlined />} 
-                            onClick={() => handleExplain(idx)}
-                            style={{ 
-                                background: colors.cardBg, 
-                                borderColor: colors.border,
-                                color: colors.text 
-                            }}
-                        >
-                            Explain
-                        </Button>
                     </div>
 
                     <Paragraph style={{ margin: '12px 0 16px 28px', fontSize: '16px', color: colors.text }}>

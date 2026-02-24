@@ -18,6 +18,7 @@ import { LoadingSpinner } from './components/common/LoadingSpinner';
 // Pages
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
+import { VerifyEmailPage } from './pages/auth/VerifyEmailPage';
 import { DashboardPage } from './pages/dashboard/DashboardPage';
 import { MyGroupsPage } from './pages/groups/MyGroupsPage';
 import { BrowseGroupsPage } from './pages/groups/BrowseGroupsPage';
@@ -85,6 +86,10 @@ const router = createBrowserRouter([
         <RegisterPage />
       </PublicRoute>
     ),
+  },
+  {
+    path: "/verify-email",
+    element: <VerifyEmailPage />
   },
   {
     path: "/dashboard",

@@ -128,16 +128,19 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const register = async (userData: any) => {
     try {
       dispatch({ type: 'AUTH_START' });
+      
+      // The backend now returns { message: "..." } instead of tokens
       const response = await authService.register(userData);
 
-      // Store tokens
-      localStorage.setItem('access_token', response.access_token);
-      localStorage.setItem('refresh_token', response.refresh_token);
-
-      dispatch({ type: 'AUTH_SUCCESS', payload: response.user });
-      toast.success(`Welcome, ${response.user.firstName}! Your account has been created.`);
+      // Do NOT store tokens or dispatch AUTH_SUCCESS here anymore!
+      // Instead, we just reset the loading state (LOGOUT safely resets loading and auth state to false)
+      dispatch({ type: 'LOGOUT' }); 
+      
+      // Show the success message returned from the backend
+      toast.success(response.message || 'Registration successful! Please check your email to verify your account.');
+      
     } catch (error: any) {
-      const errorMessage = error.response?.data?.message || 'Registration failed';
+      const errorMessage = error.response?.data?.message || error.message || 'Registration failed';
       dispatch({ type: 'AUTH_FAILURE', payload: errorMessage });
       toast.error(errorMessage);
       throw error;

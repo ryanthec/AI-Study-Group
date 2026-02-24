@@ -91,4 +91,59 @@ class EmailService:
             print(f"Failed to send invitation email: {e}")
             return False
 
+
+
+    def send_verification_email(self, user_email: str, user_name: str, token: str) -> bool:
+        """Send account verification email via Brevo API"""
+        try:
+            verification_link = f"{self.frontend_url}/verify-email?token={token}"
+            subject = "Verify your AI Study Group account"
+            
+            html_body = f"""
+            <html>
+                <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+                    <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
+                        <h2 style="color: #1890ff;">Welcome to AI Study Group!</h2>
+                        <p>Hi {user_name},</p>
+                        <p>Thank you for registering. Please verify your email address by clicking the button below:</p>
+                        
+                        <div style="margin: 30px 0;">
+                            <a href="{verification_link}" 
+                               style="background-color: #1890ff; color: white; padding: 12px 24px; 
+                                      text-decoration: none; border-radius: 4px; display: inline-block;">
+                                Verify Email
+                            </a>
+                        </div>
+                        
+                        <p>Or copy and paste this link in your browser:</p>
+                        <p style="color: #666; word-break: break-all;">{verification_link}</p>
+                        
+                        <p style="margin-top: 30px; font-size: 12px; color: #999;">
+                            This link will expire in 24 hours.
+                        </p>
+                    </div>
+                </body>
+            </html>
+            """
+            
+            payload = {
+                "sender": {"name": self.sender_name, "email": self.sender_email},
+                "to": [{"email": user_email}],
+                "subject": subject,
+                "htmlContent": html_body
+            }
+            
+            headers = {
+                "accept": "application/json",
+                "api-key": self.api_key,
+                "content-type": "application/json"
+            }
+
+            response = requests.post(self.api_url, json=payload, headers=headers)
+            return 200 <= response.status_code < 300
+
+        except Exception as e:
+            print(f"Failed to send verification email: {e}")
+            return False
+            
 email_service = EmailService()
