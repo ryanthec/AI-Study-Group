@@ -1,4 +1,6 @@
 # app/services/embedding_service.py
+import time
+
 from google import genai
 from google.genai import types
 from typing import List, Optional
@@ -7,82 +9,70 @@ import numpy as np
 
 class EmbeddingService:
     def __init__(self):
-        free_key = os.getenv("GEMINI_API_KEY_FREE")
-        paid_key = os.getenv("GEMINI_API_KEY")
-        
-        self.clients = []
-        if free_key:
-            self.clients.append(("Free", genai.Client(api_key=free_key)))
-        if paid_key:
-            self.clients.append(("Paid", genai.Client(api_key=paid_key)))
+        self.client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
         self.model = "gemini-embedding-001"
         self.dimension = 768  # gemini-embedding-001 dimension
     
     def embed_text(self, text: str) -> List[float]:
-        last_exception = None
-        for client_name, client in self.clients:
-            try:
-                result = client.models.embed_content(
-                    model=self.model,
-                    contents=text,
-                    config=types.EmbedContentConfig(output_dimensionality=self.dimension)
-                )
-                return list(result.embeddings[0].values)
-            except Exception as e:
-                print(f"Embedding failed on {client_name} key: {e}")
-                last_exception = e
-                continue
-        raise RuntimeError(f"Embedding failed on all keys: {last_exception}")
+        """Generate embedding for a single text"""
+        try:
+            result = self.client.models.embed_content(
+                model=self.model,
+                contents=text,
+                config=types.EmbedContentConfig(output_dimensionality=768)
+            )
+            return list(result.embeddings[0].values)
+        except Exception as e:
+            print(f"Error generating embedding: {e}")
+            raise
     
-    def embed_batch(self, texts: List[str], batch_size: int = 100) -> List[List[float]]:
+    def embed_batch(self, texts: List[str], batch_size: int = 5) -> List[List[float]]:
         """
         Generate embeddings for multiple texts at once.
-        Handles API limits by splitting input into batches of max 100 requests.
-        Includes fallback support across multiple API keys.
+        Handles API limits by splitting input into micro-batches and sleeping on rate limits.
         """
         all_embeddings = []
         total_texts = len(texts)
         
-        # Loop through the texts in chunks of 'batch_size' (default 100)
         for i in range(0, total_texts, batch_size):
             batch = texts[i : i + batch_size]
             batch_success = False
             last_exception = None
             
-            # Inner loop: Try Free key first, then Paid key
-            for client_name, client in self.clients:
+            # Retry loop for rate limits
+            max_retries = 3
+            for attempt in range(max_retries):
                 try:
-                    # Call API for this specific batch using the current client
-                    result = client.models.embed_content(
+                    result = self.client.models.embed_content(
                         model=self.model,
                         contents=batch,
-                        # Using self.dimension to keep it consistent with your init
-                        config=types.EmbedContentConfig(output_dimensionality=self.dimension) 
+                        config=types.EmbedContentConfig(output_dimensionality=self.dimension)
                     )
                     
-                    # Extract embeddings for this batch and extend the main list
                     if result.embeddings:
                         batch_embeddings = [list(emb.values) for emb in result.embeddings]
                         all_embeddings.extend(batch_embeddings)
                     
                     batch_success = True
-                    break # Success! Break out of the client fallback loop for this batch
+                    break # Success! Break out of the retry loop
                     
                 except Exception as e:
-                    # To keep dependencies simple here, we check the exception string for rate limit codes
                     error_str = str(e)
-                    if "429" in error_str or "503" in error_str:
-                        print(f"Batch {i//batch_size + 1} hit rate limit on {client_name} key. Falling back...")
-                    else:
-                        print(f"Batch {i//batch_size + 1} encountered error on {client_name} key: {e}")
-                        
                     last_exception = e
-                    continue # Try the next key
+                    
+                    # Check if the error is a Rate Limit (429) or Service Unavailable (503)
+                    if "429" in error_str or "503" in error_str:
+                        if attempt < max_retries - 1:
+                            print(f"Chunk {i+1}/{total_texts} hit rate limit. Sleeping for 20 seconds before attempt {attempt + 2}...")
+                            time.sleep(20) # Wait for the per-minute quota to reset
+                            continue
+                    
+                    # If it's a 400 (Token Limit) or other error, break and fail
+                    print(f"Chunk {i+1}/{total_texts} encountered an error: {e}")
+                    break
                     
             if not batch_success:
-                # If we exhausted all keys for this specific batch, fail the whole process
-                # This prevents you from inserting incomplete document chunks into your database
-                error_msg = f"Failed to embed batch {i//batch_size + 1} on all keys. Last error: {last_exception}"
+                error_msg = f"Failed to embed chunk {i+1} after retries. Last error: {last_exception}"
                 print(error_msg)
                 raise RuntimeError(error_msg)
                 

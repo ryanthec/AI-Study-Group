@@ -1,7 +1,7 @@
 import io
 import PyPDF2
 import docx
-from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, status
+from fastapi import APIRouter, Depends, File, UploadFile, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
@@ -49,6 +49,7 @@ def extract_text_from_file(file_content: bytes, filename: str) -> str:
 @router.post("/upload/{group_id}")
 async def upload_document(
     group_id: int,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -83,31 +84,17 @@ async def upload_document(
         file_bytes = await file.read()
         
         if len(file_bytes) > MAX_FILE_SIZE:
-            raise HTTPException(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail=f"File size exceeds {MAX_FILE_SIZE // (1024*1024)}MB limit"
-            )
+            raise HTTPException(status_code=413, detail="File too large")
         
-        # Extract text from file
-        text_content = extract_text_from_file(file_bytes, file.filename)
-        
-        if not text_content or len(text_content.strip()) == 0:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Could not extract text from document"
-            )
-        
-        # Process document through RAG pipeline
-        document = DocumentService.process_document(
-            db=db,
-            group_id=group_id,
-            uploader_id=current_user.id,
-            filename=file.filename,
-            file_type=extension.lstrip('.'),
-            text_content=text_content,
-            file_size=len(file_bytes),
-            file_bytes=file_bytes
+        # 1. Instantly save the file metadata and bytes to PostgreSQL
+        document = DocumentService.save_document_initial(
+            db=db, group_id=group_id, uploader_id=current_user.id,
+            filename=file.filename, file_type=extension.lstrip('.'),
+            file_bytes=file_bytes, file_size=len(file_bytes)
         )
+        
+        # 2. Fire the heavy embedding process in the background
+        background_tasks.add_task(DocumentService.process_document_background, document.id)
         
         return {
             "id": document.id,

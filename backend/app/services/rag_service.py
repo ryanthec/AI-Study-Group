@@ -12,7 +12,7 @@ class RAGConfig:
     include_conversations: bool = True
     top_k_documents: int = 3
     top_k_conversations: int = 3
-    similarity_threshold: float = 0.75
+    similarity_threshold: float = 0.5
     embed_conversations_first: bool = False  # If True, embed recent conversations before searching
     hours_back: int = 24  # For conversation embedding
     max_doc_chars: int = 2000  # For prompt formatting
@@ -114,26 +114,34 @@ class RAGService:
         config: Optional[RAGConfig] = None
     ) -> str:
         """
-        Format retrieved context into a prompt-friendly string
-        
-        Args:
-            context: Context dictionary from retrieve_context
-            config: Optional config for character limits
+        Format retrieved context into a prompt-friendly string,
+        grouping chunks by their source document to prevent citation hallucinations.
         """
         if config is None:
             config = RAGConfig()
         
         formatted = ""
         
-        # Format document context
+        # Format document context - GROUPED BY SOURCE
         if context.get("documents"):
             formatted += "📚 Study Materials:\n"
-            for idx, doc in enumerate(context["documents"], 1):
-                formatted += f"\n[Document {idx}: {doc['source']}]\n"
-                content = doc['content'][:config.max_doc_chars]
-                if len(doc['content']) > config.max_doc_chars:
-                    content += "..."
-                formatted += f"{content}\n"
+            
+            # 1. Group the chunks by filename
+            grouped_docs: Dict[str, List[str]] = {}
+            for doc in context["documents"]:
+                source = doc['source']
+                if source not in grouped_docs:
+                    grouped_docs[source] = []
+                grouped_docs[source].append(doc['content'])
+                
+            # 2. Format the grouped chunks
+            for source, chunks in grouped_docs.items():
+                formatted += f"\n[Source Document: {source}]\n"
+                for idx, chunk_content in enumerate(chunks, 1):
+                    content = chunk_content[:config.max_doc_chars]
+                    if len(chunk_content) > config.max_doc_chars:
+                        content += "..."
+                    formatted += f"--- Excerpt {idx} ---\n{content}\n"
         
         # Format conversation context
         if context.get("conversations"):

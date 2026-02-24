@@ -67,7 +67,7 @@ class QuizGeneratorAgent:
 
         # 1. Fetch Documents and Upload
         if document_ids:
-            docs = db.query(Document).filter(Document.id.in_(document_ids)).all()
+            docs = db.query(Document).filter(Document.id.in_(document_ids), Document.status == "COMPLETED").all()
             
             for doc in docs:
                 if doc.file_data:
@@ -104,8 +104,9 @@ class QuizGeneratorAgent:
             prompt=user_message,
             system_prompt=QUIZ_SYSTEM_PROMPT,
             temperature=0.4, 
-            max_output_tokens=4000,
-            attachments=uploaded_files 
+            max_output_tokens=8192,
+            attachments=uploaded_files,
+            response_mime_type="application/json"
         )
 
         if not response_text:
@@ -113,8 +114,8 @@ class QuizGeneratorAgent:
 
         # 4. Parse JSON
         try:
-            cleaned_text = response_text.replace("```json", "").replace("```", "").strip()
-            quiz_data = json.loads(cleaned_text)
+            # Because we used application/json, we no longer need to strip markdown ```json block wrappers!
+            quiz_data = json.loads(response_text.strip())
             return quiz_data
         except json.JSONDecodeError:
             logger.error(f"Failed to parse quiz JSON: {response_text}")

@@ -92,21 +92,12 @@ class BaseLLMModel:
             default_temperature: Default temperature for responses
             max_sessions: Maximum number of concurrent sessions
         """
-        self.api_key = api_key or os.getenv("GEMINI_API_KEY") or os.getenv("GEMINI_API_KEY_FREE")
+        self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY not provided and not found in environment")
         
-        free_key = os.getenv("GEMINI_API_KEY_FREE")
-        paid_key = api_key or os.getenv("GEMINI_API_KEY")
-        # Store clients as a list of tuples: (Name, ClientInstance)
-        self.clients = []
-        if free_key:
-            self.clients.append(("Free", genai.Client(api_key=free_key)))
-        if paid_key:
-            self.clients.append(("Paid", genai.Client(api_key=paid_key)))
-            
-        if not self.clients:
-            raise ValueError("No Gemini API keys provided in environment")
+        
+        self.client = genai.Client(api_key=self.api_key)
         self.model_name = model_name
 
         self.fallback_chain = [
@@ -241,21 +232,17 @@ class BaseLLMModel:
 
     # Helper to upload files from as an attachment in model API calls
     def upload_file_from_bytes(self, file_bytes: bytes, mime_type: str, display_name: str = "attachment") -> types.File:
-        last_exception = None
-        for client_name, client in self.clients:
-            try:
-                file_io = io.BytesIO(file_bytes)
-                file_upload = client.files.upload(
-                    file=file_io,
-                    config=types.UploadFileConfig(display_name=display_name, mime_type=mime_type)
-                )
-                logger.info(f"Uploaded file {display_name} via {client_name} key")
-                return file_upload
-            except Exception as e:
-                logger.warning(f"Failed to upload using {client_name} key: {e}")
-                last_exception = e
-                
-        raise RuntimeError(f"File upload failed on all keys: {str(last_exception)}")
+        try:
+            file_io = io.BytesIO(file_bytes)
+            file_upload = self.client.files.upload(
+                file=file_io,
+                config=types.UploadFileConfig(display_name=display_name, mime_type=mime_type)
+            )
+            logger.info(f"Uploaded file {display_name} ({mime_type}) with URI {file_upload.uri}")
+            return file_upload
+        except Exception as e:
+            logger.error(f"Failed to upload file bytes: {str(e)}")
+            raise RuntimeError(f"File upload failed: {str(e)}")
         
     # Helper to build contents from session history
     def build_contents_for_session(
@@ -373,37 +360,43 @@ class BaseLLMModel:
         last_exception = None
     
         for model in self.fallback_chain:
-            for client_name, client in self.clients:
-                try:
-                    logger.info(f"Attempting generation with model: {model} using {client_name} key")
-                    
-                    response = await client.models.generate_content(
-                        model=model,
-                        contents=contents,
-                        config=generation_config, 
-                    )
-                    
-                    response_text = response.text if response.text else ""
-                    session.add_message("assistant", response_text)
-                    return response_text
+            try:
+                logger.info(f"Attempting generation with model: {model}")
+                
+                response = await self.client.models.generate_content(
+                    model=model,
+                    contents=contents,
+                    config=generation_config, 
+                )
+                
+                response_text = response.text if response.text else ""
+                
+                # Success! Save to history and return
+                session.add_message("assistant", response_text)
+                return response_text
 
-                except (ClientError, ServerError) as e:
-                    if e.code in [429, 503]:
-                        logger.warning(f"Rate limit/Error hit on {model} via {client_name} key (Status: {e.code}). Falling back...")
-                        last_exception = e
-                        continue # Try next client, then next model
-                    
-                    if isinstance(e, ClientError):
-                        logger.error(f"Non-retriable ClientError on {model} via {client_name}: {e}")
-                        raise e
-                    
-                    logger.error(f"Non-retriable ServerError on {model} via {client_name}: {e}")
-                    raise e
+            except (ClientError, ServerError) as e:
 
-                except Exception as e:
-                    logger.error(f"Unexpected error on {model} via {client_name}: {e}")
+                if e.code in [429, 503]:
+                    logger.warning(f"Rate limit/Error hit on {model} (Status: {e.code}). Falling back...")
                     last_exception = e
-                    continue
+                    continue # Try next model
+                
+                # Treat other 5xx errors as retriable if you want, or raise them. 
+                # For safety, we usually raise 4xx errors (like 400 Invalid Argument) immediately.
+                if isinstance(e, ClientError):
+                    logger.error(f"Non-retriable ClientError on {model}: {e}")
+                    raise e
+                
+                # If it's a ServerError other than 503, we might want to continue or raise.
+                # Currently your logic raises non-503s here, which is fine:
+                logger.error(f"Non-retriable ServerError on {model}: {e}")
+                raise e
+
+            except Exception as e:
+                logger.error(f"Unexpected error on {model}: {e}")
+                last_exception = e
+                continue
 
         # If we exit the loop, all models failed
         error_msg = f"All models exhausted. Last error: {str(last_exception)}"
@@ -465,10 +458,10 @@ class BaseLLMModel:
         max_output_tokens: Optional[int] = 2048,
         use_chat_history: bool = True,
         attachments: Optional[List[types.File]] = None
+        
     ) -> AsyncIterator[str]:
         """
-        Stream a response as text deltas with cascading fallback support 
-        across both API keys and models.
+        Stream a response as text deltas with cascading fallback support.
         """
         session = self.get_session(session_id)
         if session is None:
@@ -490,6 +483,7 @@ class BaseLLMModel:
             "temperature": temperature if temperature is not None else self.default_temperature,
             "top_p": top_p if top_p is not None else self.top_p,
             "top_k": top_k if top_k is not None else self.top_k,
+            # Note: Ensure 'thinking_config' is supported by Flash/Lite or handle potential warnings
             "thinking_config": types.ThinkingConfig(thinking_budget=0),
         }
         
@@ -506,64 +500,64 @@ class BaseLLMModel:
         # === CASCADE LOOP ===
         accumulated = []
         last_exception = None
+        
+        # We need to know if we successfully started streaming to avoid duplicates
         stream_completed_successfully = False
 
-        # Outer loop: Try Flash first, then Lite
         for model in self.fallback_chain:
+            has_yielded_content = False # Track if this specific model output anything
             
-            # Inner loop: Try Free key first, then Paid key
-            for client_name, client in self.clients:
-                has_yielded_content = False 
+            try:
+                logger.info(f"Attempting stream with model: {model}")
                 
-                try:
-                    logger.info(f"Attempting stream with model: {model} using {client_name} key")
-                    
-                    # Get the stream iterator using the specific client from the loop
-                    stream = await client.aio.models.generate_content_stream(
-                        model=model,
-                        contents=contents,
-                        config=generation_config,
-                    )
+                # Get the stream iterator
+                stream = await self.client.aio.models.generate_content_stream(
+                    model=model,
+                    contents=contents,
+                    config=generation_config,
+                )
 
-                    async for chunk in stream:
-                        delta = getattr(chunk, "text", None)
-                        if not delta:
-                            continue
-                        
-                        has_yielded_content = True
-                        accumulated.append(delta)
-                        yield delta
+                async for chunk in stream:
+                    delta = getattr(chunk, "text", None)
+                    if not delta:
+                        continue
                     
-                    # If we finish the stream loop successfully
-                    stream_completed_successfully = True
-                    break # Break out of the inner client loop
+                    # If we get here, the model is working.
+                    has_yielded_content = True
+                    accumulated.append(delta)
+                    yield delta
+                
+                # If we finish the loop, we are done
+                stream_completed_successfully = True
+                break
 
-                except (ClientError, ServerError) as e:
-                    if e.code in [429, 503]:
-                        if has_yielded_content:
-                            # Cannot cleanly switch to a new client/model mid-sentence
-                            logger.error(f"Rate limit hit mid-stream on {model} via {client_name}. Cannot fallback.")
-                            raise e
-                        
-                        logger.warning(f"Rate limit hit on {model} via {client_name} (start of stream). Falling back...")
-                        last_exception = e
-                        continue # Try the next client
-                    else:
-                        logger.error(f"Non-retriable error on {model} via {client_name}: {e}")
-                        raise e
-                        
-                except Exception as e:
+            except (ClientError, ServerError) as e:
+                # 429 (Too Many Requests) or 503 (Service Unavailable)
+                if e.code in [429, 503]:
                     if has_yielded_content:
-                        logger.error(f"Error mid-stream on {model} via {client_name}: {e}")
+                        # CRITICAL: If we already sent text to the frontend, we cannot 
+                        # cleanly switch to a new model (it would restart the sentence).
+                        # We must raise the error.
+                        logger.error(f"Rate limit hit mid-stream on {model}. Cannot fallback.")
                         raise e
-                        
-                    logger.error(f"Unexpected error on {model} via {client_name}: {e}")
+                    
+                    # Otherwise, clean retry
+                    logger.warning(f"Rate limit hit on {model} (start of stream). Falling back...")
                     last_exception = e
                     continue
-
-            # Check if the inner loop succeeded. If yes, break the outer loop too.
-            if stream_completed_successfully:
-                break
+                else:
+                    # Non-retriable error (e.g., Invalid Argument)
+                    logger.error(f"Non-retriable error on {model}: {e}")
+                    raise e
+                    
+            except Exception as e:
+                if has_yielded_content:
+                    logger.error(f"Error mid-stream on {model}: {e}")
+                    raise e
+                    
+                logger.error(f"Unexpected error on {model}: {e}")
+                last_exception = e
+                continue
 
         # 4. Finalize
         if stream_completed_successfully:
@@ -571,7 +565,8 @@ class BaseLLMModel:
             session.add_message("assistant", final_text)
             logger.info(f"Streamed response for session {session_id} with {len(accumulated)} chunks")
         else:
-            error_msg = f"All models and keys exhausted for streaming. Last error: {str(last_exception)}"
+            # If we fall through the loop without success
+            error_msg = f"All models exhausted for streaming. Last error: {str(last_exception)}"
             logger.error(error_msg)
             raise RuntimeError(error_msg)
 
@@ -616,6 +611,7 @@ class BaseLLMModel:
         max_output_tokens: int = 100,
         temperature: float = 0.0,
         attachments: Optional[List[types.File]] = None,
+        response_mime_type: Optional[str] = None,
     ) -> str:
         """
         Generate a one-off response without session history.
@@ -653,41 +649,42 @@ class BaseLLMModel:
         if system_prompt:
             config_params["system_instruction"] = system_prompt
 
+        if response_mime_type:
+            config_params["response_mime_type"] = response_mime_type
+
         generation_config = types.GenerateContentConfig(**config_params)
         
         # 3. Cascade Loop
         last_exception = None
-
+        
         for model in self.fallback_chain:
-            for client_name, client in self.clients:
-                try:
-                    logger.info(f"Attempting generation with model: {model} using {client_name} key")
-                    
-                    response = await client.aio.models.generate_content(
-                        model=model,
-                        contents=contents,
-                        config=generation_config, 
-                    )
-                    
-                    return response.text if response.text else ""
-
-                except (ClientError, ServerError) as e:
-                    if e.code in [429, 503]:
-                        logger.warning(f"Rate limit/Error hit on {model} via {client_name} key (Status: {e.code}). Falling back...")
-                        last_exception = e
-                        continue # Try next client, then next model
-                    
-                    if isinstance(e, ClientError):
-                        logger.error(f"Non-retriable ClientError on {model} via {client_name}: {e}")
-                        raise e
-                    
-                    logger.error(f"Non-retriable ServerError on {model} via {client_name}: {e}")
-                    raise e
-
-                except Exception as e:
-                    logger.error(f"Unexpected error on {model} via {client_name}: {e}")
+            try:
+                logger.info(f"Attempting stateless generation with model: {model}")
+                
+                # Call Model (Stateless)
+                response = await self.client.aio.models.generate_content(
+                    model=model,
+                    contents=contents,
+                    config=generation_config,
+                )
+                
+                return response.text if response.text else ""
+            
+            except (ClientError, ServerError) as e:
+                # Check for Rate Limit (429) or Service Unavailable (503)
+                if e.code in [429, 503]:
+                    logger.warning(f"Stateless rate limit hit on {model} (Status: {e.code}). Falling back...")
                     last_exception = e
-                    continue
+                    continue # Try next model
+                else:
+                    # Non-retriable error
+                    logger.error(f"Stateless non-retriable error on {model}: {e}")
+                    raise e
+                    
+            except Exception as e:
+                logger.error(f"Stateless unexpected error on {model}: {e}")
+                last_exception = e
+                continue
         
 
         # If we fall through the loop without success

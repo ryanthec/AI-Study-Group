@@ -91,47 +91,64 @@ export const AgentSettingsTab: React.FC<AgentSettingsTabProps> = ({
     }
   };
 
-  const handleSocraticLimitChange = async (
+  const handleSocraticLimitChange = (
     type: 'factual' | 'conceptual' | 'applied' | 'complex',
     value: number
   ) => {
+    // Update UI immediately for responsive feedback
+    setConfig((prev) =>
+      prev
+        ? {
+            ...prev,
+            socratic_limits: {
+              ...prev.socratic_limits,
+              [type]: value,
+            },
+          }
+        : null
+    );
+  };
+
+  const handleSocraticLimitChangeComplete = async (
+    type: 'factual' | 'conceptual' | 'applied' | 'complex',
+    value: number
+  ) => {
+    // Only make API call when slider is released
     try {
       setUpdating(true);
       await agentConfigService.updateSocraticLimits(groupId, { [type]: value });
-      setConfig((prev) =>
-        prev
-          ? {
-              ...prev,
-              socratic_limits: {
-                ...prev.socratic_limits,
-                [type]: value,
-              },
-            }
-          : null
-      );
       message.success(`Socratic limit for ${type} questions updated to ${value}`);
     } catch (error: any) {
       message.error(error.response?.data?.detail || 'Failed to update limits');
+      // Reload config on error to revert UI
+      loadConfig();
     } finally {
       setUpdating(false);
     }
   };
 
-  const handleTemperatureChange = async (value: number) => {
+  const handleTemperatureChange = (value: number) => {
+    // Update UI immediately for responsive feedback
+    setConfig((prev) =>
+      prev
+        ? {
+            ...prev,
+            temperature: value,
+          }
+        : null
+    );
+  };
+
+  const handleTemperatureChangeComplete = async (value: number) => {
+    // Only make API call when slider is released
     try {
       setUpdating(true);
       await agentConfigService.updateTemperature(groupId, value);
-      setConfig((prev) =>
-        prev
-          ? {
-              ...prev,
-              temperature: value,
-            }
-          : null
-      );
-      // message.success(`Temperature updated to ${value.toFixed(2)}`);
+      message.success(`Temperature updated to ${value.toFixed(2)}`);
     } catch (error: any) {
       message.error(error.response?.data?.detail || 'Failed to update temperature');
+      // Reload config on error to revert UI
+      loadConfig();
     } finally {
       setUpdating(false);
     }
@@ -255,6 +272,7 @@ export const AgentSettingsTab: React.FC<AgentSettingsTabProps> = ({
                     max={3}
                     value={config.socratic_limits.factual}
                     onChange={(value) => handleSocraticLimitChange('factual', value)}
+                    onAfterChange={(value) => handleSocraticLimitChangeComplete('factual', value)}
                     disabled={!isAdmin || updating}
                     marks={{
                       0: 'Direct',
@@ -296,6 +314,7 @@ export const AgentSettingsTab: React.FC<AgentSettingsTabProps> = ({
                     max={4}
                     value={config.socratic_limits.conceptual}
                     onChange={(value) => handleSocraticLimitChange('conceptual', value)}
+                    onAfterChange={(value) => handleSocraticLimitChangeComplete('conceptual', value)}
                     disabled={!isAdmin || updating}
                     marks={{
                       0: 'Direct',
@@ -328,6 +347,7 @@ export const AgentSettingsTab: React.FC<AgentSettingsTabProps> = ({
                     max={4}
                     value={config.socratic_limits.applied}
                     onChange={(value) => handleSocraticLimitChange('applied', value)}
+                    onAfterChange={(value) => handleSocraticLimitChangeComplete('applied', value)}
                     disabled={!isAdmin || updating}
                     marks={{
                       0: 'Direct',
@@ -360,6 +380,7 @@ export const AgentSettingsTab: React.FC<AgentSettingsTabProps> = ({
                     max={5}
                     value={config.socratic_limits.complex}
                     onChange={(value) => handleSocraticLimitChange('complex', value)}
+                    onAfterChange={(value) => handleSocraticLimitChangeComplete('complex', value)}
                     disabled={!isAdmin || updating}
                     marks={{
                       0: 'Direct',
@@ -400,6 +421,7 @@ export const AgentSettingsTab: React.FC<AgentSettingsTabProps> = ({
                 step={0.1}
                 value={config.temperature}
                 onChange={handleTemperatureChange}
+                onAfterChange={handleTemperatureChangeComplete}
                 disabled={!isAdmin || updating}
                 marks={{
                   0: 'Precise',

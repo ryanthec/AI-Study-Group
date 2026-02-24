@@ -3,6 +3,7 @@ import api from './api';
 export interface Document {
   id: number;
   filename: string;
+  status: string;
   file_type: string;
   file_size: number;
   created_at: string;

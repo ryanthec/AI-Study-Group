@@ -74,27 +74,15 @@ class DocumentService:
             print(f"Error extracting text from {filename}: {str(e)}")
             return f"[Error extracting text: {str(e)}]"
             
-        return content
+        # SANITIZE: Remove PostgreSQL-breaking NUL bytes
+        return content.replace('\x00', '').replace('\0', '')
     
     @staticmethod
-    def process_document(
-        db: Session,
-        group_id: int,
-        uploader_id: int,
-        filename: str,
-        file_type: str,
-        text_content: str,
-        file_bytes: bytes,
-        file_size: int = 0,
-        chunk_size: int = 2000,
-        overlap: int = 400
+    def save_document_initial(
+        db: Session, group_id: int, uploader_id: int, filename: str, 
+        file_type: str, file_bytes: bytes, file_size: int
     ) -> Document:
-        """
-        Process uploaded document: extract text, chunk, embed, and discard file
-        
-        This is a single operation - no file storage needed!
-        """
-        # Create document record
+        """Instantly save the raw file and metadata to the database."""
         document = Document(
             group_id=group_id,
             uploader_id=uploader_id,
@@ -102,32 +90,68 @@ class DocumentService:
             file_type=file_type,
             file_size=file_size,
             file_data=file_bytes,
+            status="PENDING", # Set initial status
             created_at=datetime.utcnow()
         )
         db.add(document)
-        db.flush()
-        
-        # Split into chunks
-        chunks = DocumentService.chunk_text(text_content, chunk_size, overlap)
-        
-        # Generate embeddings in batch
-        embeddings = embedding_service.embed_batch(chunks)
-        
-        # Create chunk records with embeddings
-        for idx, (chunk_text, embedding) in enumerate(zip(chunks, embeddings)):
-            chunk = DocumentChunk(
-                document_id=document.id,
-                chunk_index=idx,
-                content=chunk_text,
-                embedding=embedding,
-                created_at=datetime.utcnow()
-            )
-            db.add(chunk)
-        
         db.commit()
         db.refresh(document)
         return document
     
+
+    @staticmethod
+    def process_document_background(document_id: int):
+        """Heavy background task for extracting, chunking, and embedding."""
+        from ..core.database import SessionLocal
+        
+        # Background tasks need a fresh database session
+        db = SessionLocal()
+        try:
+            document = db.query(Document).filter(Document.id == document_id).first()
+            if not document: return
+            
+            # 1. Extract text
+            text_content = DocumentService.extract_text_from_bytes(document.filename, document.file_data)
+            
+            # 2. Chunk and Embed
+            chunks = DocumentService.chunk_text(text_content)
+            embeddings = embedding_service.embed_batch(chunks)
+            
+            # 3. Save Chunks
+            for idx, (chunk_text, embedding) in enumerate(zip(chunks, embeddings)):
+                chunk = DocumentChunk(
+                    document_id=document.id, chunk_index=idx, 
+                    content=chunk_text, embedding=embedding, 
+                    created_at=datetime.utcnow()
+                )
+                db.add(chunk)
+            
+            # 4. Mark as completed
+            document.status = "COMPLETED"
+            db.commit()
+            
+            # Optional: If you want to push a WebSocket notification to the frontend
+            # from ..core.websocket_manager import manager
+            # asyncio.run(manager.broadcast_to_group(document.group_id, {
+            #     "type": "document_ready", "filename": document.filename
+            # }))
+            
+        except Exception as e:
+            print(f"Background processing failed for {document_id}: {e}")
+            # CRITICAL: Rollback the poisoned transaction before trying to write again
+            db.rollback() 
+            
+            # Now it's safe to update the status
+            try:
+                if document:
+                    document.status = "ERROR"
+                    db.commit()
+            except Exception as inner_e:
+                print(f"Failed to update error status: {inner_e}")
+        finally:
+            db.close()
+
+
     @staticmethod
     def similarity_search(
         db: Session,
@@ -177,12 +201,16 @@ class DocumentService:
 
 
     @staticmethod
-    def get_group_documents(db: Session, group_id: int):
-        # We use defer('file_data') so we don't load the heavy PDF bytes 
-        # when just listing files in the UI.
-        return db.query(Document).options(defer(Document.file_data)).filter(
+    def get_group_documents(db: Session, group_id: int, only_completed: bool = False):
+        """Fetch documents. Agents should set only_completed=True to avoid reading pending files."""
+        query = db.query(Document).options(defer(Document.file_data)).filter(
             Document.group_id == group_id
-        ).all()
+        )
+        
+        if only_completed:
+            query = query.filter(Document.status == "COMPLETED")
+            
+        return query.all()
 
     @staticmethod
     def get_document_by_id(db: Session, document_id: int, group_id: int) -> Optional[Document]:
@@ -191,4 +219,12 @@ class DocumentService:
             Document.id == document_id,
             Document.group_id == group_id
         ).first()
+    
+    @staticmethod
+    def get_document_with_bytes(db: Session, document_id: int, group_id: int) -> Optional[Document]:
+        """Fetch a document including its heavy file_data binary."""
+        return db.query(Document).filter(
+            Document.id == document_id,
+            Document.group_id == group_id
+        ).first() # By default, SQLAlchemy won't defer unless explicitly told to
     

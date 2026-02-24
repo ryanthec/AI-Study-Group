@@ -19,6 +19,7 @@ class Document(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     file_data = Column(LargeBinary, nullable=True)
+    status = Column(String(20), default="PENDING") # "PENDING", "COMPLETED", or "ERROR"
 
     # Relationships
     group = relationship("StudyGroup", back_populates="documents")

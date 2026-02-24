@@ -12,6 +12,7 @@ import re
 
 from .base_llm_model import BaseLLMModel
 from ..services.rag_service import RAGConfig, RAGService
+from ..services.document_service import DocumentService
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -387,6 +388,66 @@ class TeachingAssistantAgent:
             4. If the student answers correctly, validate them immediately.
             ---"""
 
+    
+
+    # ========================
+    # Helper Functions
+    # ========================
+    async def _infer_referenced_document(self, question: str, group_docs: list) -> Optional[Any]:
+        """
+        Uses a fast, stateless LLM call to infer if the user's query refers to an available file.
+        """
+        if not group_docs:
+            return None
+            
+        # Create a clean list of available filenames
+        file_list = "\n".join([f"- {doc.filename}" for doc in group_docs])
+        
+        # System prompt updated to include TOPICAL mapping
+        prompt = f"""
+        You are a routing assistant for an educational platform.
+        Here are the available files uploaded by the group:
+        {file_list}
+        
+        User's message: "{question}"
+        
+        Task: Determine if the user's message refers to one of the files OR if the question's main topic strongly matches a filename.
+        
+        Rules:
+        1. Be lenient with abbreviations (e.g., "my fyp" -> "FYP_Interim_Report.pdf").
+        2. TOPIC MATCHING: If the user asks about a specific topic that matches a filename (e.g., asking about "RAG" when "rag_paper.pdf" exists), treat it as a match.
+        3. If there is a match, output ONLY the exact filename. Do not include quotes, dashes, or any other text.
+        4. If there is no clear match, output exactly "NONE".
+        """
+        
+        try:
+            # We use temperature 0.0 for strict, deterministic matching
+            response = await self.base_llm.generate_stateless_response(
+                prompt=prompt,
+                max_output_tokens=50,
+                temperature=0.0 
+            )
+            
+            # Clean up the output to handle LLM formatting quirks
+            result = response.strip().strip("'").strip('"')
+            if result.startswith("- "):
+                result = result[2:]
+
+            print(f"LLM inferred document reference: '{result}' from question: '{question}'")
+            
+            # Map the string response back to the actual Document object
+            if result.upper() != "NONE":
+                for doc in group_docs:
+                    # Make the matching case-insensitive and slightly more forgiving
+                    if doc.filename.lower() == result.lower() or result.lower() in doc.filename.lower():
+                        logger.info(f"LLM inferred reference to document: {doc.filename}")
+                        return doc
+                        
+        except Exception as e:
+            logger.error(f"Failed to infer document reference: {e}")
+            
+        return None
+
 
 
     # ========================
@@ -434,21 +495,79 @@ class TeachingAssistantAgent:
         system_prompt = self._build_adaptive_system_prompt(difficulty, prompt_limit)
 
        # Prepare user message with optional RAG context
+        attachments = []
         user_message = question
+
         if use_rag and config.rag_mode != RAGMode.DISABLED:
             if self.rag_service is None:
-                logger.warning("RAG requested but service not configured, proceeding without RAG")
+                logger.warning("RAG requested but service not configured")
             elif db_session is None:
-                logger.warning("RAG requested but db_session not provided, proceeding without RAG")
+                logger.warning("RAG requested but db_session not provided")
             else:
                 try:
-                    user_message = self._prepare_message_with_rag(
+                    from ..services.document_service import DocumentService
+                    
+                    group_docs = DocumentService.get_group_documents(db_session, group_id, only_completed=True)
+                    
+                    # 1. Ask the LLM to infer if a file was mentioned
+                    inferred_doc = await self._infer_referenced_document(question, group_docs)
+                    
+                    # 2. If it found a match, process it natively (with caching)
+                    if inferred_doc:
+                        filename = inferred_doc.filename
+                        
+                        session = self.base_llm.get_session(session_id)
+                        if not session:
+                            session = self.create_session(session_id, group_id)
+                            
+                        if 'attached_files' not in session.metadata:
+                            session.metadata['attached_files'] = {}
+                        
+                        if filename in session.metadata['attached_files']:
+                            logger.info(f"Reusing already uploaded file reference for: {filename}")
+                            attachments.append(session.metadata['attached_files'][filename])
+                        else:
+                            full_doc = DocumentService.get_document_with_bytes(db_session, inferred_doc.id, group_id)
+                            
+                            if full_doc and full_doc.file_data:
+                                try:
+                                    mime_type = "application/pdf" if filename.endswith(".pdf") else "text/plain"
+                                    
+                                    uploaded_file = self.base_llm.upload_file_from_bytes(
+                                        file_bytes=full_doc.file_data,
+                                        mime_type=mime_type,
+                                        display_name=filename
+                                    )
+                                    attachments.append(uploaded_file)
+                                    session.metadata['attached_files'][filename] = uploaded_file
+                                    
+                                except Exception as e:
+                                    logger.error(f"Failed to upload {filename} to Gemini: {e}")
+
+                        # ADD THE CRITICAL ALIAS MAPPING INSTRUCTION HERE
+                        user_message += (
+                            f"\n\n[CRITICAL SYSTEM NOTE: The user is casually asking about their document. "
+                            f"Assume any casual phrasing like 'my FYP', 'the report', or 'my notes' refers EXACTLY to '{filename}'. "
+                            f"The retrieved chunks below or attached files belong to this document. Do NOT claim you lack access to it.]"
+                        )
+
+                    # 3. Pass the ORIGINAL 'question' so vector search isn't corrupted
+                    rag_enhanced_prompt = self._prepare_message_with_rag(
                         question, group_id, db_session, config
                     )
+                    
+                    # Combine the RAG string with our modified user_message safely
+                    if f"Student Question: {question}" in rag_enhanced_prompt:
+                        user_message = rag_enhanced_prompt.replace(
+                            f"Student Question: {question}", 
+                            f"Student Question: {user_message}"
+                        )
+                    else:
+                        user_message = f"{rag_enhanced_prompt}\n\nStudent Question: {user_message}"
+                        
                 except Exception as e:
-                    logger.error(f"RAG retrieval failed: {str(e)}, proceeding without RAG")
+                    logger.error(f"RAG retrieval failed: {str(e)}")
 
-        # Generate response
         temperature = custom_temperature or config.temperature
         top_p = custom_top_p or config.top_p
         top_k = custom_top_k or config.top_k
@@ -461,7 +580,8 @@ class TeachingAssistantAgent:
             top_p=top_p,
             top_k=top_k,
             max_output_tokens=config.max_output_tokens,
-            use_chat_history=True
+            use_chat_history=True,
+            attachments=attachments,
         )
 
         return response
@@ -511,7 +631,11 @@ class TeachingAssistantAgent:
         system_prompt = self._build_adaptive_system_prompt(difficulty, prompt_limit)
 
         # Prepare user message with optional RAG context
+        attachments = []
         user_message = question
+
+        clean_question = question.split(": ", 1)[-1] if ": " in question else question
+
         if use_rag and config.rag_mode != RAGMode.DISABLED:
             if self.rag_service is None:
                 logger.warning("RAG requested but service not configured, proceeding without RAG")
@@ -519,9 +643,72 @@ class TeachingAssistantAgent:
                 logger.warning("RAG requested but db_session not provided, proceeding without RAG")
             else:
                 try:
-                    user_message = self._prepare_message_with_rag(
-                        question, group_id, db_session, config
+                    
+                    group_docs = DocumentService.get_group_documents(db_session, group_id, only_completed=True)
+                    
+                    # 1. Ask the LLM to infer if a file was mentioned
+                    inferred_doc = await self._infer_referenced_document(question, group_docs)
+                    
+                    # 2. If it found a match, process it natively (with caching)
+                    if inferred_doc:
+                        filename = inferred_doc.filename
+                        
+                        # Fetch or Create Session to access state metadata
+                        session = self.base_llm.get_session(session_id)
+                        if not session:
+                            session = self.create_session(session_id, group_id)
+                            
+                        # Initialize attachment cache if it doesn't exist
+                        if 'attached_files' not in session.metadata:
+                            session.metadata['attached_files'] = {}
+                        
+                        # CHECK: Has this file already been uploaded in this session?
+                        if filename in session.metadata['attached_files']:
+                            logger.info(f"Reusing already uploaded file reference for: {filename}")
+                            # Reuse the existing API file URI instead of re-uploading bytes
+                            attachments.append(session.metadata['attached_files'][filename])
+                        else:
+                            # FIRST TIME: Upload and cache the file
+                            full_doc = DocumentService.get_document_with_bytes(db_session, inferred_doc.id, group_id)
+                            
+                            if full_doc and full_doc.file_data:
+                                try:
+                                    mime_type = "application/pdf" if filename.endswith(".pdf") else "text/plain"
+                                    
+                                    uploaded_file = self.base_llm.upload_file_from_bytes(
+                                        file_bytes=full_doc.file_data,
+                                        mime_type=mime_type,
+                                        display_name=filename
+                                    )
+                                    attachments.append(uploaded_file)
+                                    
+                                    # Save the Google API file reference to the session metadata
+                                    session.metadata['attached_files'][filename] = uploaded_file
+                                    
+                                except Exception as e:
+                                    logger.error(f"Failed to upload {filename} to Gemini: {e}")
+
+                        # ADD THE CRITICAL ALIAS MAPPING INSTRUCTION HERE
+                        user_message += (
+                            f"\n\n[CRITICAL SYSTEM NOTE: The user is casually asking about their document. "
+                            f"Assume any casual phrasing like 'my FYP', 'the report', or 'my notes' refers EXACTLY to '{filename}'. "
+                            f"The retrieved chunks below or attached files belong to this document. Do NOT claim you lack access to it.]"
+                        )
+
+                    # 3. FIX: Pass the ORIGINAL 'question' so vector search isn't corrupted
+                    rag_enhanced_prompt = self._prepare_message_with_rag(
+                        clean_question, group_id, db_session, config
                     )
+                    
+                    # Combine the RAG string with our modified user_message safely
+                    if f"Student Question: {clean_question}" in rag_enhanced_prompt:
+                        user_message = rag_enhanced_prompt.replace(
+                            f"Student Question: {clean_question}", 
+                            f"Student Question: {user_message}"
+                        )
+                    else:
+                        user_message = f"{rag_enhanced_prompt}\n\nStudent Question: {user_message}"
+                        
                 except Exception as e:
                     logger.error(f"RAG retrieval failed: {str(e)}, proceeding without RAG")
 
@@ -538,7 +725,8 @@ class TeachingAssistantAgent:
             top_p=top_p,
             top_k=top_k,
             max_output_tokens=config.max_output_tokens,
-            use_chat_history=True
+            use_chat_history=True,
+            attachments=attachments, # Pass attachments such as full uploaded documents if needed
         ):
             yield chunk
 
@@ -577,11 +765,21 @@ class TeachingAssistantAgent:
             config=rag_config
         )
 
-        # Prepare enhanced message with Defensive Prompting
+        # === ADD DEBUG PRINT STATEMENTS HERE ===
+        print("\n" + "="*40)
+        print(f"DEBUG RAG - Question: '{question}'")
+        print(f"DEBUG RAG - Docs Retrieved: {len(context_dict.get('documents', []))}")
+        print(f"DEBUG RAG - Convs Retrieved: {len(context_dict.get('conversations', []))}")
+        print("DEBUG RAG - Formatted Context going to LLM:")
+        print(formatted_context)
+        print("="*40 + "\n")
+        # =======================================
+
+        # Prepare enhanced message with Explicit Citation Prompting
         enhanced_message = (
             f"SYSTEM: I have automatically retrieved the following study materials for you. "
             f"Please EVALUATE their relevance to the student's question:\n"
-            f"1. If the materials contain the answer, use them and cite them.\n"
+            f"1. If the materials contain the answer, you MUST use them and STRICTLY cite the source document name inline (e.g., 'According to [Filename.pdf], ...' or '... as shown in the materials [Filename.pdf]').\n"
             f"2. If the materials are IRRELEVANT (e.g., matched on keywords but wrong topic), "
             f"IGNORE them completely and answer based on your general knowledge.\n"
             f"3. Do NOT force a connection if none exists.\n\n"
@@ -635,3 +833,5 @@ class TeachingAssistantAgent:
     def list_group_sessions(self, group_id: int) -> List:
         """List all sessions for a study group."""
         return self.base_llm.list_sessions(group_id=group_id)
+
+

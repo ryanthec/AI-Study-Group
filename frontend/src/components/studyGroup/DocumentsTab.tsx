@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Table, Button, Space, message, Popconfirm, Empty, Spin, Tooltip, Tag, Card } from 'antd';
-import { DeleteOutlined, DownloadOutlined } from '@ant-design/icons';
+import { CheckCircleOutlined, CloseCircleOutlined, DeleteOutlined, DownloadOutlined, SyncOutlined } from '@ant-design/icons';
 import { studyGroupService } from '../../services/studyGroup.service';
 import type { ColumnsType } from 'antd/es/table';
 import { useTheme } from '../../hooks/useTheme';
@@ -8,6 +8,7 @@ import { useTheme } from '../../hooks/useTheme';
 interface Document {
   id: number;
   filename: string;
+  status: string;
   file_type: string;
   file_size: number;
   created_at: string;
@@ -36,6 +37,40 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
   useEffect(() => {
     loadDocuments();
   }, [groupId]);
+
+  // Polling logic for PENDING documents
+  useEffect(() => {
+    let intervalId: ReturnType<typeof setInterval>;
+
+    const hasPending = documents.some(doc => doc.status === 'PENDING');
+
+    if (hasPending) {
+      intervalId = setInterval(async () => {
+        try {
+          const updatedDocs = await studyGroupService.getGroupDocuments(groupId);
+          
+          // Check for newly completed docs to show notification
+          updatedDocs.forEach((newDoc: Document) => {
+            const oldDoc = documents.find(d => d.id === newDoc.id);
+            if (oldDoc && oldDoc.status === 'PENDING' && newDoc.status === 'COMPLETED') {
+              message.success(`Your document '${newDoc.filename}' has been processed and is ready!`);
+            } else if (oldDoc && oldDoc.status === 'PENDING' && newDoc.status === 'ERROR') {
+              message.error(`Failed to process '${newDoc.filename}'.`);
+            }
+          });
+
+          setDocuments(updatedDocs);
+        } catch (error) {
+          console.error("Failed to poll documents", error);
+        }
+      }, 5000); // Poll every 5 seconds
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [documents, groupId]);
+
 
   const loadDocuments = async () => {
     try {
@@ -84,6 +119,21 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
       ),
     },
     {
+      title: 'Status',
+      dataIndex: 'status',
+      key: 'status',
+      width: 140,
+      render: (status: string) => {
+        if (status === 'PENDING') {
+          return <Tag color="processing" icon={<SyncOutlined spin />}>PROCESSING</Tag>;
+        }
+        if (status === 'ERROR') {
+          return <Tag color="error" icon={<CloseCircleOutlined />}>ERROR</Tag>;
+        }
+        return <Tag color="success" icon={<CheckCircleOutlined />}>READY</Tag>;
+      },
+    },
+    {
       title: 'Type',
       dataIndex: 'file_type',
       key: 'file_type',
@@ -119,7 +169,11 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
           {(isAdmin || record.uploader.id === currentUserId) && (
             <Popconfirm
               title="Delete Document"
-              description="Are you sure you want to delete this document?"
+              description={
+                record.status === 'PENDING' 
+                  ? "Are you sure you want to cancel and delete this processing document?" 
+                  : "Are you sure you want to delete this document?"
+              }
               onConfirm={() => handleDelete(record.id)}
               okText="Yes"
               cancelText="No"
