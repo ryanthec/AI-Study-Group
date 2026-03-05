@@ -203,7 +203,7 @@ async def run_game_loop(game_id: int):
             db.commit()
             
             current_card = session.cards[i]
-            await game_manager.send_next_card(game_id, current_card, time_limit)
+            await game_manager.send_next_card(game_id, current_card, time_limit, current_index=i, total_cards=total_cards)
             
             # 2. Wait for Time Limit (Players submit answers during this time)
             await asyncio.sleep(time_limit)
@@ -243,7 +243,7 @@ async def run_game_loop(game_id: int):
             if i < total_cards - 1:
                 await asyncio.sleep(5) # Normal intermission
             else:
-                await asyncio.sleep(10) # Longer wait for the final question's result
+                await asyncio.sleep(3) # Longer wait for the final question's result
         
         # Finish Game
         session.status = GameStatus.LOBBY

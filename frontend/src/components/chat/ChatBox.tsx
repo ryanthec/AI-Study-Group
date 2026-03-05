@@ -470,6 +470,11 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
 
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Tab' && showAutocomplete && autocompleteOptions.length > 0) {
+      e.preventDefault();
+      handleAutocompleteSelect(autocompleteOptions[0].value);
+      return;
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -883,7 +888,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
                 <Divider type="vertical" style={{ height: '20px', borderColor: theme.border }} />
                 <Button type="text" icon={<FileTextOutlined />} disabled style={{ color: theme.secondaryText }} />
                 <Button type="text" icon={<BulbOutlined />} disabled style={{ color: theme.secondaryText }} />
-                <Input.TextArea value={inputValue} disabled variant="borderless" autoSize={{ minRows: 1, maxRows: 3 }} style={{ flex: 1, color: theme.otherText, padding: '11px 0', resize: 'none' }} />
+                <Input.TextArea value={inputValue} disabled variant="borderless" autoSize={{ minRows: 1, maxRows: 3 }} style={{ flex: 1, color: theme.otherText, padding: '11px 12px', resize: 'none' }} />
                 <Button type="text" icon={<SendOutlined />} disabled style={{ color: theme.secondaryText }} />
               </>
             ) : (
@@ -907,7 +912,7 @@ export const ChatBox: React.FC<ChatBoxProps> = ({ groupId, onOnlineUsersUpdate }
                   <Button type="text" icon={<BulbOutlined />} onClick={toggleSocratic} loading={configLoading} style={{ color: agentConfig?.socratic_prompting ? '#fff' : theme.secondaryText, backgroundColor: agentConfig?.socratic_prompting ? theme.activeSocratic : 'transparent', borderRadius: '6px', padding: '4px 8px', transition: 'all 0.2s' }} />
                 </Tooltip>
 
-                <Input.TextArea ref={inputRef} value={inputValue} onChange={(e) => handleInputChange(e.target.value)} onKeyDown={handleKeyDown} disabled={!connected} placeholder={mode === 'private' ? "Ask your private AI tutor..." : `Message #${groupId} (Type @ to mention Bob)`} variant="borderless" autoSize={{ minRows: 1, maxRows: 3 }} style={{ flex: 1, background: 'transparent', color: theme.otherText, fontSize: '15px', padding: '11px 0', resize: 'none' }} />
+                <Input.TextArea ref={inputRef} value={inputValue} onChange={(e) => handleInputChange(e.target.value)} onKeyDown={handleKeyDown} disabled={!connected} placeholder={mode === 'private' ? "Ask your private AI tutor..." : `Message #${groupId} (Type @ to mention Bob)`} variant="borderless" autoSize={{ minRows: 1, maxRows: 3 }} style={{ flex: 1, background: 'transparent', color: theme.otherText, fontSize: '15px', padding: '11px 12px', resize: 'none' }} />
 
                 <Button type="text" icon={<SendOutlined />} onClick={handleSend} disabled={!connected || (!inputValue.trim() && attachments.length === 0)} style={{ color: (inputValue.trim() || attachments.length > 0) ? theme.ownBubble : theme.secondaryText, padding: '4px 8px' }} />
               </>

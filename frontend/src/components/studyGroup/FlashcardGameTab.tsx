@@ -33,6 +33,8 @@ export const FlashcardGameTab = ({ groupId, setGameActive }: FlashcardGameTabPro
   // Round State
   const [currentCard, setCurrentCard] = useState<any>(null);
   const [timeLeft, setTimeLeft] = useState(15);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [totalQuestions, setTotalQuestions] = useState(0);
 
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const selectedOptionRef = useRef<string | null>(null);
@@ -206,6 +208,8 @@ export const FlashcardGameTab = ({ groupId, setGameActive }: FlashcardGameTabPro
           setGameState('playing');
           setCurrentCard(data.card);
           setTimeLeft(data.time_limit);
+          setCurrentQuestionIndex(data.current_index);
+          setTotalQuestions(data.total_cards)
           setSelectedOption(null);
           selectedOptionRef.current = null;
           setRoundResultInfo(null);
@@ -269,6 +273,7 @@ export const FlashcardGameTab = ({ groupId, setGameActive }: FlashcardGameTabPro
         <div style={{ marginBottom: 20 }}>
           <Tag color="blue">{activeGame?.topic}</Tag>
           <Tag color={getDiffColor(activeGame?.difficulty)}>{activeGame?.difficulty?.toUpperCase()}</Tag>
+          <Tag color="purple">Question {currentQuestionIndex + 1} of {totalQuestions}</Tag>
         </div>
         <Progress type="circle" percent={(timeLeft / totalTime) * 100} format={() => `${timeLeft}s`} status={timeLeft < 5 ? 'exception' : 'active'} strokeColor={isDark && timeLeft < 5 ? '#ff4d4f' : undefined} />
         <Title level={2} style={{ marginTop: 20, color: textColor }}>{currentCard.front}</Title>
@@ -457,6 +462,7 @@ export const FlashcardGameTab = ({ groupId, setGameActive }: FlashcardGameTabPro
         open={isModalOpen}
         onCancel={() => setIsModalOpen(false)}
         footer={null}
+        maskClosable={false}
       >
         <Form form={form} layout="vertical" onFinish={handleCreateGame}>
 

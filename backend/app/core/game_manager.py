@@ -43,7 +43,7 @@ class GameManager:
             except Exception:
                 pass
 
-    async def send_next_card(self, game_id: int, card: dict, time_limit: int = 15):
+    async def send_next_card(self, game_id: int, card: dict, time_limit: int = 15, current_index: int = 0, total_cards: int = 0):
         """Broadcasts the next card to all players"""
         await self.broadcast(game_id, {
             "type": "new_card",
@@ -51,7 +51,9 @@ class GameManager:
                 "front": card["front"],
                 "options": card["options"] # Don't send the correct answer ('back') yet!
             },
-            "time_limit": time_limit
+            "time_limit": time_limit,
+            "current_index": current_index,
+            "total_cards": total_cards
         })
 
     async def send_round_result(self, game_id: int, correct_answer: str, leaderboard: list):

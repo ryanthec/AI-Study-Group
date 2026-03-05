@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from 'react';
-import { Table, Button, Space, message, Popconfirm, Empty, Spin, Tooltip, Tag, Card } from 'antd';
-import { CheckCircleOutlined, CloseCircleOutlined, DeleteOutlined, DownloadOutlined, SyncOutlined } from '@ant-design/icons';
+import React, { useEffect, useState, useRef } from 'react';
+import { Table, Button, Space, message, Popconfirm, Empty, Spin, Tooltip, Tag, Card, Typography } from 'antd';
+import { CheckCircleOutlined, CloseCircleOutlined, DeleteOutlined, DownloadOutlined, SyncOutlined, UploadOutlined } from '@ant-design/icons';
 import { studyGroupService } from '../../services/studyGroup.service';
 import type { ColumnsType } from 'antd/es/table';
 import { useTheme } from '../../hooks/useTheme';
+
+const { Text, Title } = Typography;
 
 interface Document {
   id: number;
@@ -24,15 +26,45 @@ interface DocumentsTabProps {
   currentUserId: string;
 }
 
-export const DocumentsTab: React.FC<DocumentsTabProps> = ({
-  groupId,
-  isAdmin,
-  currentUserId,
-}) => {
+export const DocumentsTab: React.FC<DocumentsTabProps> = ({groupId, isAdmin, currentUserId}) => {
   const { isDark } = useTheme();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<number | null>(null);
+
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Check file extension
+    const fileExtension = file.name.split('.').pop()?.toLowerCase();
+    if (!['pdf', 'txt', 'docx', 'doc'].includes(fileExtension || '')) {
+      message.error('Only PDF, DOCX, and TXT files are allowed');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      message.error('File size exceeds 10MB limit');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    setUploading(true);
+    try {
+      await studyGroupService.uploadDocument(groupId, file);
+      message.success(`Document "${file.name}" uploaded successfully`);
+      loadDocuments(); // Refresh the table
+    } catch (error: any) {
+      message.error(error.response?.data?.detail || 'Failed to upload document');
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = ''; // Reset input
+    }
+  };
 
   useEffect(() => {
     loadDocuments();
@@ -197,6 +229,41 @@ export const DocumentsTab: React.FC<DocumentsTabProps> = ({
 
   return (
     <div style={{ padding: '24px' }}>
+
+
+      {/* UPLOAD HEADER SECTION */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '20px' }}>
+        <div>
+          <Title level={4} style={{ color: isDark ? '#e3e5e8' : '#1f1f1f', margin: 0, paddingBottom: '4px' }}>
+            Group Documents
+          </Title>
+          <Text type="secondary" style={{ fontSize: '12px' }}>
+            * Only PDF, DOCX, and TXT files are to be uploaded. Max size 10MB.
+          </Text>
+        </div>
+        
+        <div>
+          {/* Hidden file input */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            style={{ display: 'none' }}
+            accept=".pdf,.txt,.docx,.doc"
+            onChange={handleFileSelect}
+          />
+          <Button
+            type="primary"
+            icon={<UploadOutlined />}
+            onClick={() => fileInputRef.current?.click()}
+            loading={uploading}
+            size="large"
+          >
+            Upload Document
+          </Button>
+        </div>
+      </div>
+
+
       <Card
        style={{
           boxShadow: isDark
