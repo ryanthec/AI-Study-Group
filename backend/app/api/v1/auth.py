@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from jose import jwt, JWTError
 from ...core.database import get_db
 from ...core.security import create_access_token, get_current_user, verify_password, get_password_hash, SECRET_KEY, ALGORITHM
-from ...schemas.auth import LoginRequest, RegisterRequest, AuthResponse, TokenResponse
+from ...schemas.auth import LoginRequest, RegisterRequest, AuthResponse, TokenResponse, RefreshTokenRequest
 from ...models.user import User
 from ...services.email_service import email_service
 
@@ -130,11 +130,48 @@ async def read_me(
     return current_user.to_dict()
 
 
+
+
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh_token(
-    refresh_token: str,
+    request: RefreshTokenRequest,
     db: Session = Depends(get_db)
 ):
     """Refresh access token"""
-    # Implementation for token refresh
-    pass
+    try:
+        # Decode the refresh token
+        payload = jwt.decode(request.refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get("sub")
+        
+        if email is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token"
+            )
+            
+        # Verify user still exists and is active
+        user = db.query(User).filter(User.email == email).first()
+        if not user or not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found or inactive"
+            )
+            
+        # Generate new tokens
+        access_token = create_access_token(data={"sub": user.email})
+        new_refresh_token = create_access_token(
+            data={"sub": user.email}, 
+            expires_delta=timedelta(days=7)
+        )
+        
+        return TokenResponse(
+            access_token=access_token,
+            refresh_token=new_refresh_token,
+            token_type="bearer"
+        )
+        
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token"
+        )
