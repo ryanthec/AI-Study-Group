@@ -1,6 +1,6 @@
 import React from 'react';
-import { Card, Descriptions, Tag, Space, Avatar, List, Empty, Spin } from 'antd';
-import { CrownOutlined, UserOutlined, GlobalOutlined, LockOutlined } from '@ant-design/icons';
+import { Card, Descriptions, Tag, Space, Avatar, List, Empty, Spin, Button, Tooltip } from 'antd';
+import { CrownOutlined, UserOutlined, GlobalOutlined, LockOutlined, UserAddOutlined } from '@ant-design/icons';
 import type { StudyGroup } from '../../types/studyGroup.types';
 import { useTheme } from "../../hooks/useTheme";
 
@@ -17,6 +17,7 @@ interface GroupDetailsTabProps {
   loading: boolean;
   members: GroupMember[];
   membersLoading: boolean;
+  onInvite?: () => void;
 }
 
 export const GroupDetailsTab: React.FC<GroupDetailsTabProps> = ({
@@ -24,6 +25,7 @@ export const GroupDetailsTab: React.FC<GroupDetailsTabProps> = ({
   loading,
   members,
   membersLoading,
+  onInvite,
 }) => {
 
   const { isDark } = useTheme();
@@ -85,7 +87,18 @@ export const GroupDetailsTab: React.FC<GroupDetailsTabProps> = ({
       </Card>
 
       {/* Members List Card */}
-      <Card title="Group Members" loading={membersLoading} style={{ ...cardStyle, marginTop: '24px' }}>
+      <Card title="Group Members" 
+        loading={membersLoading} 
+        style={{ ...cardStyle, marginTop: '24px' }} 
+        extra={
+            group.is_admin ? (
+              <Tooltip title="Invite new members to the group">
+                <Button type="primary" icon={<UserAddOutlined />} onClick={onInvite}>
+                  Invite Member
+                </Button>
+              </Tooltip>
+            ) : null
+      }>
         {members && members.length > 0 ? (
           <List
             dataSource={members}

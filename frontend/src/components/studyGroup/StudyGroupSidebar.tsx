@@ -26,7 +26,6 @@ interface StudyGroupSidebarProps {
   activeTab: 'details' | 'chat' | 'documents' | 'agent settings' | 'quizzes' | 'games';
   onTabChange: (tab: 'details' | 'chat' | 'documents' | 'agent settings' | 'quizzes' | 'games') => void;
   onEdit?: () => void;
-  onInvite?: () => void;
   onDelete?: () => void;
   onLeave?: () => void;
   onBackToGroups?: () => void;
@@ -38,7 +37,6 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
   activeTab,
   onTabChange,
   onEdit,
-  onInvite,
   onDelete,
   onLeave,
   onBackToGroups,
@@ -280,11 +278,6 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
                   onClick={onEdit}
                 >
                   Settings
-                </Button>
-              </Tooltip>
-              <Tooltip title="Invite members to group">
-                <Button block icon={<UserAddOutlined />} onClick={onInvite}>
-                  Invite
                 </Button>
               </Tooltip>
               <Tooltip title="Delete this group permanently">

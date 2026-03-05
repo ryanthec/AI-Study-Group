@@ -209,6 +209,7 @@ export const GroupDetailPage: React.FC = () => {
             loading={loading}
             members={members}
             membersLoading={membersLoading}
+            onInvite={() => setInviteModalVisible(true)}
           />
         );
     }
@@ -233,7 +234,6 @@ export const GroupDetailPage: React.FC = () => {
             activeTab={activeTab}
             onTabChange={handleTabChange}
             onEdit={handleEdit}
-            onInvite={() => setInviteModalVisible(true)}
             onDelete={handleDelete}
             onLeave={handleLeave}
             onBackToGroups={handleBackToGroups}
