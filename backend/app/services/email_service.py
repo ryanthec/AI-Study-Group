@@ -9,7 +9,7 @@ class EmailService:
         self.api_key = os.getenv("BREVO_API_KEY", "")
         
         # Sender info needs to be a valid verified sender in Brevo
-        self.sender_email = os.getenv("SMTP_SENDER", "noreply@yourdomain.com") 
+        self.sender_email = os.getenv("SMTP_SENDER", "noreply@aistudyhub.app") 
         self.sender_name = os.getenv("SENDER_NAME", "AI Study Group App")
         
         self.frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")

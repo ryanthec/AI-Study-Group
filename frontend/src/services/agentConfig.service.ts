@@ -26,10 +26,6 @@ interface UpdateSocraticLimitsRequest {
 const getAuthHeaders = () => {
   const token = localStorage.getItem('access_token');
 
-  // Debug logs
-  console.log('[Agent Config] Token from localStorage:', token);
-  console.log('[Agent Config] Token length:', token?.length);
-  console.log('[Agent Config] Token segments:', token?.split('.').length);
   return {
     Authorization: `Bearer ${token}`,
   };

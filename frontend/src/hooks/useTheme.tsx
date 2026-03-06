@@ -17,7 +17,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
     // Check localStorage for saved theme preference
     const saved = localStorage.getItem('app-theme-mode');
-    return (saved as ThemeMode) || 'light';
+    return (saved as ThemeMode) || 'dark';
   });
 
   useEffect(() => {

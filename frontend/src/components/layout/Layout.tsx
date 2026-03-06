@@ -10,13 +10,13 @@ interface LayoutProps {
 }
 
 export const Layout: React.FC<LayoutProps> = ({ children }) => {
-  const { isDark } = useTheme(); // ✅ Get theme state
+  const { isDark } = useTheme(); //  Get theme state
 
   return (
     <AntLayout
       style={{
         minHeight: '100vh',
-        background: 'var(--canvas-bg)', // ✅ Dynamic background
+        background: 'var(--canvas-bg)', //  Dynamic background
         display: 'flex',
         flexDirection: 'column',
       }}
@@ -26,7 +26,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
       <Content
         style={{
           padding: 24,
-          background: 'var(--canvas-bg)', // ✅ Dynamic background
+          background: 'var(--canvas-bg)', //  Dynamic background
           display: 'flex',
           justifyContent: 'center',
         }}
@@ -35,11 +35,11 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
           style={{
             width: '100%',
             maxWidth: 1200,
-            background: 'var(--nav-bg)', // ✅ Dynamic container background
+            background: 'var(--nav-bg)', //  Dynamic container background
             borderRadius: 8,
             padding: 24,
-            border: '1px solid var(--border-color)', // ✅ Added explicit border
-            boxShadow: 'var(--card-shadow)', // ✅ Dynamic shadow
+            border: '1px solid var(--border-color)', //  Added explicit border
+            boxShadow: 'var(--card-shadow)', //  Dynamic shadow
           }}
         >
           {children}

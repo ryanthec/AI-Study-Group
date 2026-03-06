@@ -89,24 +89,33 @@ export const MyGroupsPage: React.FC = () => {
                 renderItem={(group) => (
                   <List.Item
                     key={group.id}
+                    onClick={() => navigate(`/groups/${group.id}`)}
                     style={{
                       borderBottom: isDark
                         ? '1px solid #434343'
                         : '1px solid #767677ff',
                       padding: '16px 0',
+                      cursor: 'pointer',
                     }}
                     actions={[
                       group.is_admin && (
                         <Button
                           icon={<SettingOutlined />}
-                          onClick={() => navigate(`/groups/${group.id}/edit`)}
+                          
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/groups/${group.id}/edit`);
+                          }}
                         >
                           Manage
                         </Button>
                       ),
                       <Button
                         type="primary"
-                        onClick={() => navigate(`/groups/${group.id}`)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/groups/${group.id}`);
+                        }}
                       >
                         Open
                       </Button>,

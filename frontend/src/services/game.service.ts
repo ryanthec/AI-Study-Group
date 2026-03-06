@@ -71,7 +71,6 @@ export const gameService = {
     // Construct the URL: WS_HOST + /api/v1/games/{gameId}/ws
     const url = `${WS_HOST}/api/v1/games/${gameId}/ws?token=${encodeURIComponent(token)}`;
     
-    console.log('Connecting to Game WS:', url);
     return new WebSocket(url);
   },
 };

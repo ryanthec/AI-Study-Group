@@ -107,22 +107,35 @@ export const BrowseGroupsPage: React.FC = () => {
             locale={{ emptyText: <Empty description="No study groups found" /> }}
             renderItem={(group) => (
               <List.Item
+                onClick={() => {
+                  if (group.is_member) {
+                    navigate(`/groups/${group.id}`);
+                  }
+                }}
                 style={{
                   borderBottom: isDark
                     ? '1px solid #434343'
                     : '1px solid #767677ff',
                   padding: '16px 0',
+                  cursor: group.is_member ? 'pointer' : 'default',
                 }}
                 actions={[
                   group.is_member ? (
-                    <Button type="primary" onClick={() => navigate(`/groups/${group.id}`)}>
+                    <Button type="primary" 
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/groups/${group.id}`);
+                      }}>
                       Open
                     </Button>
                   ) : (
                     <Button
                       type="primary"
                       disabled={group.member_count >= group.max_members}
-                      onClick={() => handleJoin(group.id)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/groups/${group.id}`);
+                      }}
                     >
                       {group.member_count >= group.max_members ? 'Full' : 'Join'}
                     </Button>

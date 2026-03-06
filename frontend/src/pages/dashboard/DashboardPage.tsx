@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Row, Col, Statistic, Button, List, Tag, Typography, Space, Layout } from 'antd';
+import { Card, Row, Col, Statistic, Button, List, Tag, Typography, Space } from 'antd';
 import {
   TeamOutlined,
   BookOutlined,
@@ -46,90 +46,79 @@ export const DashboardPage: React.FC = () => {
   };
 
 
-  // Define shadows (for visual contrast between components) and color based on theme
-  const cardStyle = {
-    boxShadow: isDark 
-      ? '0 2px 8px rgba(0, 0, 0, 0.45)' 
-      : '0 1px 4px rgba(0, 0, 0, 2)',
-    border: isDark ? '1px solid #434343' : '1px solid #9fa1a3ff',
-    borderRadius: '8px',
-  };
-
-  const bgColor = isDark ? '#1f1f1f' : '#f9f9f9';
-
   return (
-    <Layout style={{ minHeight: '100vh', background: bgColor }}>
-      <Layout.Content style={{ padding: '24px', background: bgColor,}}>
-        {/* Header */}
-        <div style={{ marginBottom: '32px' }}>
-          <Title level={2} style={{ margin: 0 }}>
-            Dashboard
-          </Title>
-          <Text type="secondary">Welcome back! Here's your study group overview.</Text>
-        </div>
+    <>
+      {/* Header */}
+      <div style={{ marginBottom: '32px' }}>
+        <Title level={2} style={{ margin: 0 }}>
+          Dashboard
+        </Title>
+        <Text type="secondary">Welcome back! Here's your study group overview.</Text>
+      </div>
 
-        {/* Create Group Button */}
-        <div style={{ marginBottom: '24px' }}>
-          <Button
-            type="primary"
-            size="large"
-            icon={<PlusOutlined />}
-            onClick={() => navigate('/groups/create')}
-            style={{ borderRadius: '6px' }}
-          >
-            Create Study Group
-          </Button>
-        </div>
-
-        {/* Stats Cards */}
-        <Row gutter={[16, 16]} style={{ marginBottom: '32px' }}>
-          <Col xs={24} sm={8}>
-            <Card style={cardStyle} loading={loading}>
-              <Statistic
-                title="Total Groups"
-                value={stats.total_groups}
-                prefix={<TeamOutlined />}
-                valueStyle={{ color: '#1890ff' }}
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={8}>
-            <Card style={cardStyle} loading={loading}>
-              <Statistic
-                title="Groups Created"
-                value={stats.groups_created}
-                prefix={<BookOutlined />}
-                valueStyle={{ color: '#52c41a' }}
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={8}>
-            <Card style={cardStyle} loading={loading}>
-              <Statistic
-                title="Quizzes Completed"
-                value={stats.quizzes_completed}
-                prefix={<TrophyOutlined />}
-                valueStyle={{ color: '#faad14' }}
-              />
-            </Card>
-          </Col>
-        </Row>
-
-        {/* Recent Groups */}
-        <Card
-          title="Your Recent Study Groups"
-          extra={
-            <Button
-              type="link"
-              onClick={() => navigate('/groups')}
-              icon={<ArrowRightOutlined />}
-            >
-              View All
-            </Button>
-          }
-          style={cardStyle}
-          loading={loading}
+      {/* Create Group Button */}
+      <div style={{ marginBottom: '24px' }}>
+        <Button
+          type="primary"
+          size="large"
+          icon={<PlusOutlined />}
+          onClick={() => navigate('/groups/create')}
+          style={{ borderRadius: '6px' }}
         >
+          Create Study Group
+        </Button>
+      </div>
+
+      {/* Stats Cards */}
+      <Row gutter={[16, 16]} style={{ marginBottom: '32px' }}>
+        <Col xs={24} sm={8}>
+          <Card loading={loading} bordered={false} style={{ background: 'transparent' }}>
+            <Statistic
+              title="Total Groups"
+              value={stats.total_groups}
+              prefix={<TeamOutlined />}
+              valueStyle={{ color: '#1890ff' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={8}>
+          <Card loading={loading} bordered={false} style={{ background: 'transparent' }}>
+            <Statistic
+              title="Groups Created"
+              value={stats.groups_created}
+              prefix={<BookOutlined />}
+              valueStyle={{ color: '#52c41a' }}
+            />
+          </Card>
+        </Col>
+        <Col xs={24} sm={8}>
+          <Card loading={loading} bordered={false} style={{ background: 'transparent' }}>
+            <Statistic
+              title="Quizzes Completed"
+              value={stats.quizzes_completed}
+              prefix={<TrophyOutlined />}
+              valueStyle={{ color: '#faad14' }}
+            />
+          </Card>
+        </Col>
+      </Row>
+
+      {/* Recent Groups */}
+      <Card
+        title="Your Recent Study Groups"
+        extra={
+          <Button
+            type="link"
+            onClick={() => navigate('/groups')}
+            icon={<ArrowRightOutlined />}
+          >
+            View All
+          </Button>
+        }
+        bordered={false}
+        style={{ background: 'transparent' }}
+        loading={loading}
+      >
           {recentGroups.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px 20px' }}>
               <Text type="secondary">No study groups yet</Text>
@@ -148,14 +137,19 @@ export const DashboardPage: React.FC = () => {
               renderItem={(group) => (
                 <List.Item
                   key={group.id}
-                  actions={[
-                    <Button
-                      type="link"
-                      onClick={() => navigate(`/groups/${group.id}`)}
-                    >
-                      View
-                    </Button>,
-                  ]}
+                  onClick={() => navigate(`/groups/${group.id}`)}
+                  style={{
+                    cursor: 'pointer',
+                    borderBottom: isDark ? '1px solid #434343' : '1px solid #f0f0f0',
+                    padding: '16px 12px',
+                    transition: 'background-color 0.3s',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = isDark ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.02)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = 'transparent';
+                  }}
                 >
                   <List.Item.Meta
                     title={group.name}
@@ -179,7 +173,6 @@ export const DashboardPage: React.FC = () => {
             />
           )}
         </Card>
-      </Layout.Content>
-    </Layout>
+    </>
   );
 };
