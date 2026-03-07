@@ -324,7 +324,7 @@ export const QuizTab: React.FC<{ groupId: number }> = ({ groupId }) => {
 
             <div style={{ display: 'flex', gap: '16px' }}>
                 <Form.Item name="num_questions" label={<span style={{ color: colors.text }}>Questions</span>} initialValue={10} style={{ flex: 1 }}>
-                    <InputNumber min={5} max={20} style={{ width: '100%' }} />
+                    <InputNumber min={5} max={15} style={{ width: '100%' }} />
                 </Form.Item>
                 <Form.Item name="scope" label={<span style={{ color: colors.text }}>Visibility</span>} initialValue="group" style={{ flex: 1 }}>
                     <Radio.Group style={{ width: '100%', display: 'flex' }}>
