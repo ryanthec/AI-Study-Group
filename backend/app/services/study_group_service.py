@@ -85,16 +85,16 @@ class StudyGroupService:
 
     @staticmethod
     def create_group(db: Session, group_data: CreateStudyGroupRequest, creator_id: int) -> StudyGroup:
-        # Check user's group limit (max 5 active memberships)
+        # Check user's group limit (max 10 active memberships)
         user_groups = db.query(StudyGroupMembership).filter(
             StudyGroupMembership.user_id == creator_id,
             StudyGroupMembership.is_active == True
         ).count()
         
-        if user_groups >= 5:
+        if user_groups >= 10:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Maximum of 5 active group memberships allowed"
+                detail="Maximum of 10 active group memberships allowed"
             )
 
         # Create group
@@ -184,10 +184,10 @@ class StudyGroupService:
             StudyGroupMembership.is_active == True
         ).count()
         
-        if user_groups >= 5:
+        if user_groups >= 10:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Maximum of 5 active group memberships allowed"
+                detail="Maximum of 10 active group memberships allowed"
             )
 
         # Create membership

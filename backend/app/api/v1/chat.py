@@ -214,8 +214,8 @@ async def stream_ai_response(
             user_id=None,  # AI has no user_id
             content=complete_response,
             message_type=MessageType.AI_RESPONSE,
-            is_private=is_private,      # <--- New Flag
-            recipient_id=recipient_id   # <--- New Link to User
+            is_private=is_private,
+            recipient_id=recipient_id
         )
         
         final_payload = {

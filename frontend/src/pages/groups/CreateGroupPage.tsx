@@ -95,7 +95,7 @@ export const CreateGroupPage: React.FC = () => {
               <InputNumber
                 size="large"
                 min={2}
-                max={10}
+                max={6}
                 style={{ width: '100%' }}
               />
             </Form.Item>

@@ -70,7 +70,7 @@ export const useVoiceChat = () => {
   return context;
 };
 
-// --- AUDIO MANAGER (No changes needed here, logic is solid) ---
+// --- AUDIO MANAGER ---
 const VoiceAudioManager = ({ 
   peers, 
   peerVolumes 

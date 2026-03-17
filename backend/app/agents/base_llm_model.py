@@ -522,12 +522,11 @@ class BaseLLMModel:
                     if not delta:
                         continue
                     
-                    # If we get here, the model is working.
                     has_yielded_content = True
                     accumulated.append(delta)
                     yield delta
                 
-                # If we finish the loop, we are done
+                # Finish loop
                 stream_completed_successfully = True
                 break
 
