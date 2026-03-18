@@ -99,6 +99,7 @@ async def upload_document(
         return {
             "id": document.id,
             "filename": document.filename,
+            "status": document.status,
             "file_type": document.file_type,
             "file_size": document.file_size,
             "created_at": document.created_at.isoformat(),
@@ -143,6 +144,7 @@ async def get_group_documents(
         {
             "id": doc.id,
             "filename": doc.filename,
+            "status": doc.status,
             "file_type": doc.file_type,
             "file_size": doc.file_size,
             "created_at": doc.created_at.isoformat(),
@@ -238,6 +240,7 @@ async def get_document(
     return {
         "id": document.id,
         "filename": document.filename,
+        "status": document.status,
         "file_type": document.file_type,
         "file_size": document.file_size,
         "created_at": document.created_at.isoformat(),

@@ -83,6 +83,19 @@ class DocumentService:
         file_type: str, file_bytes: bytes, file_size: int
     ) -> Document:
         """Instantly save the raw file and metadata to the database."""
+
+        if filename.lower().endswith('.docx') or 'wordprocessingml' in file_type.lower():
+            # 1. Extract the text using your existing helper function
+            extracted_text = DocumentService.extract_text_from_bytes(filename, file_bytes)
+            
+            # 2. Convert the clean text back into a standard byte stream
+            file_bytes = extracted_text.encode('utf-8')
+            
+            # 3. Update the metadata so it is universally recognized as a text file
+            filename = filename.rsplit('.', 1)[0] + '.txt'
+            file_type = 'text/plain'
+            file_size = len(file_bytes)
+
         document = Document(
             group_id=group_id,
             uploader_id=uploader_id,

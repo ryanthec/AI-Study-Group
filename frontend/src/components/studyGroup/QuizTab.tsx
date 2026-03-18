@@ -169,7 +169,6 @@ export const QuizTab: React.FC<{ groupId: number }> = ({ groupId }) => {
       render: (text, record) => (
         <div>
           <div style={{ fontWeight: 500, color: colors.text }}>{text}</div>
-          <div style={{ fontSize: '12px', color: colors.textSecondary }}>{record.description || "No description"}</div>
         </div>
       ),
     },
