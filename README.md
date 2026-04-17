@@ -5,6 +5,8 @@ This guide contains all necessary instructions, environment parameters, and arch
 ## 1. Software, Packages, and Tools Used
 This project utilizes a modern full-stack web architecture, integrating AI services and real-time communication protocols.
 
+To test the production version of this application, visit <https://aistudyhub.app>
+
 **Core Frameworks & Languages**
 * **Frontend Environment:** Node.js (v18.x or higher) - [Download](https://nodejs.org/)
 * **Frontend Framework:** React (built with Vite & TypeScript) - [Vite URL](https://vitejs.dev/)
