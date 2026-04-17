@@ -89,16 +89,19 @@ The easiest way to replicate and run the application is via Docker.
 **Prerequisites:** Ensure Docker Desktop and Git are installed on your machine.
 
 **Step 1: Clone the repository**
+
 ```bash
 git clone https://github.com/ryanthec/AI-Study-Group.git
 cd AI-Study-Group
 ```
 
 **Step 2: Configure Environment Variables**
+
 Create the .env files in both the /backend and /frontend directories using the parameters defined in the environments
 
 
-Step 3: Build and Run via Docker Compose
+**Step 3: Build and Run via Docker Compose**
+
 Run the following command in the root directory:
 ```bash
 docker-compose up --build
@@ -107,3 +110,4 @@ docker-compose up --build
 - The frontend will be accessible at http://localhost:5173 (or port 80 if using the production compose file).
 - The backend API documentation (Swagger UI) will be accessible at http://localhost:8000/docs.
 - The PostgreSQL database with the pgvector extension will be automatically initialized via the scripts in backend/db/init/.
+
