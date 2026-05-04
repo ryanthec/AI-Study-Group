@@ -47,7 +47,8 @@ export const BrowseGroupsPage: React.FC = () => {
     try {
       await studyGroupService.joinGroup(groupId);
       message.success('Successfully joined the group');
-      searchGroups(); // Refresh list
+      // After joining, navigate into the group
+      navigate(`/groups/${groupId}`);
     } catch (error: any) {
       message.error(error.response?.data?.detail || 'Failed to join group');
     }
@@ -134,7 +135,7 @@ export const BrowseGroupsPage: React.FC = () => {
                       disabled={group.member_count >= group.max_members}
                       onClick={(e) => {
                         e.stopPropagation();
-                        navigate(`/groups/${group.id}`);
+                        handleJoin(group.id);
                       }}
                     >
                       {group.member_count >= group.max_members ? 'Full' : 'Join'}
