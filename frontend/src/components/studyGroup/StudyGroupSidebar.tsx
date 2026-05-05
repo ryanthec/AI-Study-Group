@@ -55,6 +55,9 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
     top: 64,
     width: 250,
     zIndex: 100,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
   };
 
   // Colors for borders and backgrounds
@@ -251,7 +254,8 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
       <div style={{
         borderTop: `1px solid ${borderColor}`,
         background: actionsBackground,
-        padding: '0 0 8px 0' // Padding handled inside component or here
+        padding: '0 0 8px 0',
+        flexShrink: 0,
       }}>
         <VoiceSidebarSection />
       </div>
@@ -261,10 +265,8 @@ export const StudyGroupSidebar: React.FC<StudyGroupSidebarProps> = ({
         style={{
           padding: '16px',
           borderTop: `1px solid ${borderColor}`,
-          position: 'absolute',
-          bottom: 0,
-          width: '100%',
           background: actionsBackground,
+          flexShrink: 0,
         }}
       >
         <Space direction="vertical" style={{ width: '100%' }} size={8}>
